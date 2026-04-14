@@ -1,9 +1,34 @@
-# This file should ensure the existence of records required to run the application in every environment (production,
-# development, test). The code here should be idempotent so that it can be executed at any point in every environment.
-# The data can then be loaded with the bin/rails db:seed command (or created alongside the database with db:setup).
-#
-# Example:
-#
-#   ["Action", "Comedy", "Drama", "Horror"].each do |genre_name|
-#     MovieGenre.find_or_create_by!(name: genre_name)
-#   end
+puts "🌱 Limpando banco antigo..."
+Telemetry::RawReading.destroy_all
+Waste::Bin.destroy_all
+
+puts "🗑️ Criando lixeiras em Guaiçara..."
+
+Waste::Bin.create!([
+  {
+    tenant_slug: 'guaicara',
+    label: 'Praça Matriz',
+    level: 0,
+    status: 'normal',
+    latitude: -21.8364,
+    longitude: -49.8861
+  },
+  {
+    tenant_slug: 'guaicara',
+    label: 'Escola Municipal',
+    level: 40,
+    status: 'normal',
+    latitude: -21.8350,
+    longitude: -49.8850
+  },
+  {
+    tenant_slug: 'guaicara',
+    label: 'Prefeitura',
+    level: 80,
+    status: 'critical',
+    latitude: -21.8375,
+    longitude: -49.8870
+  }
+])
+
+puts "✅ #{Waste::Bin.count} Lixeiras criadas com sucesso!"

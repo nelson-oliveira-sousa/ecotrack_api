@@ -9,18 +9,17 @@ class Api::V1::AuthenticationController < Api::V1::ApiController
       password: params[:password]
     )
 
-    if result[:success]
-      render json: result[:data], status: :ok
-    else
-      render json: { error: result[:error] }, status: :unauthorized
-    end
+    # Guard Clause: Se não for sucesso, já era.
+    return render json: { error: result[:error] }, status: :unauthorized unless result[:success]
+
+    # Caminho feliz sem else
+    render json: result[:data], status: :ok
   end
 
   def logout
-    header =  request.headers["Authorization"]
-    token = header.split(" ").last if header
+    token = request.headers["Authorization"]&.split(" ")&.last
 
-    return render json: { error: "Token de autenticação não fornecido" }, status: :bad_request unless token
+    return render json: { error: "Token não fornecido" }, status: :bad_request if token.blank?
 
     result = Identity::Services::Revoker.call(token)
 

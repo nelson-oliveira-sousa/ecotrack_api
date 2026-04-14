@@ -56,3 +56,7 @@ gem "jwt", "~> 3.1"
 gem "rack-attack", "~> 6.8"
 
 gem "rack-cors", "~> 3.0"
+
+gem "mqtt", "~> 0.7.0"
+
+gem "dry-validation", "~> 1.11"
