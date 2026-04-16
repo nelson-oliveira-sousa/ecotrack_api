@@ -4,7 +4,7 @@ class Api::V1::AuthenticationController < Api::V1::ApiController
 
   def login
     result = Identity::Services::Authenticator.call(
-      tenant_slug: params[:tenant_slug],
+      tenant_code: params[:tenant_code],
       email: params[:email],
       password: params[:password]
     )

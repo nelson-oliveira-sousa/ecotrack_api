@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_10_175606) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_16_202722) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -31,15 +31,38 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_10_175606) do
     t.index ["waste_bin_id"], name: "index_telemetry_raw_readings_on_waste_bin_id"
   end
 
+  create_table "tenant_profiles", force: :cascade do |t|
+    t.string "contact_email"
+    t.string "contact_phone"
+    t.datetime "created_at", null: false
+    t.string "document"
+    t.bigint "tenant_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["document"], name: "index_tenant_profiles_on_document"
+    t.index ["tenant_id"], name: "index_tenant_profiles_on_tenant_id"
+  end
+
+  create_table "tenants", force: :cascade do |t|
+    t.string "code", null: false
+    t.datetime "created_at", null: false
+    t.string "name"
+    t.string "slug"
+    t.integer "status"
+    t.datetime "updated_at", null: false
+    t.index ["code"], name: "index_tenants_on_code", unique: true
+    t.index ["slug"], name: "index_tenants_on_slug"
+  end
+
   create_table "users", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "email"
     t.string "name"
     t.string "password_digest"
     t.string "role"
-    t.string "tenant_slug"
+    t.bigint "tenant_id", null: false
     t.datetime "updated_at", null: false
     t.index ["email"], name: "index_users_on_email", unique: true
+    t.index ["tenant_id"], name: "index_users_on_tenant_id"
   end
 
   create_table "waste_bins", force: :cascade do |t|
@@ -54,4 +77,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_10_175606) do
   end
 
   add_foreign_key "telemetry_raw_readings", "waste_bins"
+  add_foreign_key "tenant_profiles", "tenants"
+  add_foreign_key "users", "tenants"
 end
