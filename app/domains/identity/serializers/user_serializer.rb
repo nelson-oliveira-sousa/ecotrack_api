@@ -7,8 +7,7 @@ module Identity
           id: user.id,
           name: user.name,
           email: user.email,
-          role: user.role,
-          tenant: user.tenant.slug # O front-end costuma preferir só "tenant" na resposta
+          role: user.role
         }
       end
     end

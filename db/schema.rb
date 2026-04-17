@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_16_202722) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_16_204355) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -72,11 +72,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_16_202722) do
     t.integer "level"
     t.decimal "longitude"
     t.string "status"
-    t.string "tenant_slug"
+    t.bigint "tenant_id", null: false
     t.datetime "updated_at", null: false
+    t.index ["tenant_id"], name: "index_waste_bins_on_tenant_id"
   end
 
   add_foreign_key "telemetry_raw_readings", "waste_bins"
   add_foreign_key "tenant_profiles", "tenants"
   add_foreign_key "users", "tenants"
+  add_foreign_key "waste_bins", "tenants"
 end

@@ -27,4 +27,12 @@ class Api::V1::AuthenticationController < Api::V1::ApiController
 
     render json: { message: "Logout bem-sucedido" }, status: :ok
   end
+
+  def me
+    # Como o authorize_request já rodou, os dados estão no Current
+    render json: {
+      user: Identity::Serializers::UserSerializer.render(Current.user),
+      tenant: Identity::Serializers::TenantSerializer.render(Current.tenant)
+    }, status: :ok
+  end
 end

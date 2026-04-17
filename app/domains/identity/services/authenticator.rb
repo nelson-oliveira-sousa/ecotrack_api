@@ -15,8 +15,10 @@ module Identity
           {
             success: true,
             data: {
-              token: token,
-              user: Serializers::UserSerializer.render(user)
+              access_token: token,
+              token_type: "bearer",
+              user: Serializers::UserSerializer.render(user),
+              tenant: Serializers::TenantSerializer.render(tenant)
             }
           }
         else

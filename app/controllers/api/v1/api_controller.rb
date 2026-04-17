@@ -11,22 +11,39 @@ module Api
 
       # 2. O MOTOR DE AUTENTICAÇÃO
       def authorize_request
-        header = request.headers["Authorization"]
-        token = header.split(" ").last if header
+        # 1. Recuperamos o "RG" do ambiente enviado pelo Juan (Front)
+        header_tenant_code = request.headers["X-Tenant-Code"]
 
-        # O nosso TokenManager já faz o trabalho pesado: decodifica e verifica
-        # se o JTI está na tabela de revogados (Denylist) do Postgres.
-        decoded = Identity::Services::TokenManager.decode(token)
+        # 2. Decodificamos o Token (que já traz o user_id e jti)
+        decoded = Identity::Services::TokenManager.decode(extract_token)
 
         if decoded
           @current_user = User.find_by(id: decoded["user_id"])
-          @current_tenant = decoded["tenant_slug"]
+
+          if @current_user
+            # 3. Sincronizamos o contexto global
+            Current.user = @current_user
+            Current.tenant = @current_user.tenant # Aqui pegamos o objeto Tenant real do banco
+
+            # 🔥 A VALIDAÇÃO CRUCIAL:
+            # O Code do header precisa ser igual ao Code do Tenant que é dono desse usuário.
+            # Se o Juan tentar usar o token da prefeitura A com o Code da prefeitura B, o sistema barra.
+            if header_tenant_code.present? && Current.tenant.code != header_tenant_code
+              return render json: { error: "Inconsistência de Tenant. Acesso negado." }, status: :forbidden
+            end
+          end
         end
 
-        # Se o token for falso, expirado, revogado ou o usuário não existir mais:
-        unless @current_user
-          render json: { error: "Acesso negado. Token inválido, expirado ou revogado." }, status: :unauthorized
-        end
+        render_unauthorized unless @current_user && Current.tenant
+      end
+
+      def extract_token
+        # O token deve ser enviado no header Authorization
+        header = request.headers["Authorization"]
+        return nil if header.blank?
+
+        # O padrão é "Bearer <token>". O split separa no espaço e pegamos a última parte.
+        header.split(" ").last
       end
 
       # 3. HELPERS DE CONTEXTO
@@ -53,6 +70,16 @@ module Api
         unless current_user&.admin? || current_user&.manager?
           render json: { error: "Acesso restrito. Privilégios de gerente ou administrador necessários." }, status: :forbidden
         end
+      end
+
+      def render_unauthorized
+        render json: {
+          error: "Acesso negado. Token inválido, expirado ou revogado."
+        }, status: :unauthorized
+      end
+
+      def render_forbidden(message = "Acesso restrito.")
+        render json: { error: message }, status: :forbidden
       end
     end
   end

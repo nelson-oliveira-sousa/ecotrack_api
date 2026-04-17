@@ -5,6 +5,7 @@ Rails.application.routes.draw do
       # Autenticação
       post "login", to: "authentication#login"
       delete "logout", to: "authentication#logout"
+      get "me", to: "authentication#me"
 
       # Domínio de Tenants - Refatorado para GET com Path Param
       # Isso gera: GET /api/v1/tenants/guaicara-sp/validate
