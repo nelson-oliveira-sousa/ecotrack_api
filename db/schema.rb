@@ -10,9 +10,24 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_16_204355) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_21_224220) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
+
+  create_table "mqtt_messages", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "event_id", null: false
+    t.datetime "next_attempt_at"
+    t.jsonb "payload", default: {}, null: false
+    t.datetime "processed_at"
+    t.datetime "processing_at"
+    t.integer "retry_count", default: 0
+    t.string "status", default: "new", null: false
+    t.string "topic", null: false
+    t.datetime "updated_at", null: false
+    t.index ["event_id"], name: "index_mqtt_messages_on_event_id", unique: true
+    t.index ["status", "next_attempt_at", "created_at"], name: "idx_mqtt_messages_worker_flow"
+  end
 
   create_table "revoked_tokens", force: :cascade do |t|
     t.datetime "created_at", null: false

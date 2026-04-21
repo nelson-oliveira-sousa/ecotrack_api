@@ -5,8 +5,12 @@ namespace :mqtt do
     require "mqtt"
 
     # 1. CONFIGURAÇÕES DINÂMICAS VIA .ENV (SaaS não hardcoda configuração)
+    # Por padrão, usa o localhost para dev local, mas lê do .env para a nuvem
     mqtt_host  = ENV.fetch("MQTT_HOST", "localhost")
-    topic      = ENV.fetch("MQTT_TOPIC", "ecotrack/+/telemetry") # Usando curinga (+) para o futuro
+    mqtt_port  = ENV.fetch("MQTT_PORT", 8883).to_i
+    mqtt_user  = ENV.fetch("MQTT_USER", nil)
+    mqtt_pass  = ENV.fetch("MQTT_PASSWORD", nil)
+    topic      = ENV.fetch("MQTT_TOPIC", "topico/meu_topico")
     batch_size = ENV.fetch("MQTT_BATCH_SIZE", 50).to_i
     max_wait   = ENV.fetch("MQTT_MAX_WAIT_SECONDS", 5).to_i
 
@@ -15,10 +19,10 @@ namespace :mqtt do
     mutex = Mutex.new
     running = true # Flag de controle de vida do processo
 
-    Rails.logger = Logger.new($stdout) # Força o log pro console do Docker
-    Rails.logger.info("📡 Iniciando MQTT Listener [SaaS Mode] - Host: #{mqtt_host}")
+    Rails.logger = Logger.new($stdout) # Força o log pro console do Docker/Terminal
+    Rails.logger.info("📡 Iniciando MQTT Listener [SaaS Mode] - Host: #{mqtt_host}:#{mqtt_port}")
 
-    # 2. O CAMINHÃO DE LIXO (DESPACHO)
+    # 2. O CAMINHÃO DE LIXO (APENAS DEBUG COM PUTS)
     dispatch_batch = ->(reason) do
       batch_to_send = []
 
@@ -29,9 +33,14 @@ namespace :mqtt do
         last_flush = Time.current
       end
 
-      # O ActiveJob assume daqui. Se o Postgres estiver fora, o Solid Queue segura a bronca.
-      Telemetry::ProcessBatchJob.perform_later(batch_to_send)
-      Rails.logger.info("📦 Lote de #{batch_to_send.size} msgs despachado. Motivo: #{reason}")
+      # Apenas imprime no console para confirmar que deu certo!
+      puts "\n========================================="
+      puts "✅ DEU CERTO! Lote processado com sucesso!"
+      puts "📦 Motivo do despacho: #{reason}"
+      puts "📊 Quantidade de mensagens no lote: #{batch_to_send.size}"
+      puts "📝 Dados recebidos:"
+      puts batch_to_send.inspect
+      puts "=========================================\n"
     end
 
     # 3. GRACEFUL SHUTDOWN
@@ -61,8 +70,17 @@ namespace :mqtt do
       end
     end
 
-    # 5. LOOP DE AUTO-RECONNECT (O Motor Inquebrável)
-    client = MQTT::Client.new(mqtt_host)
+# 5. LOOP DE AUTO-RECONNECT (O Motor Inquebrável)
+# Configuração que suporta broker local ou na nuvem (HiveMQ)
+client = MQTT::Client.new(
+  host: mqtt_host,
+  port: mqtt_port,
+  username: mqtt_user,
+  password: mqtt_pass,
+  ssl: mqtt_port == 8883,
+  client_id: "ecotrack_api_#{Rails.env}_#{SecureRandom.hex(4)}" # ID Único e Persistente
+)
+
     client.clean_session = false # Ajuda a não perder msgs no QoS 1 se a conexão cair rápido
 
     while running
@@ -80,8 +98,12 @@ namespace :mqtt do
           begin
             payload = JSON.parse(message).deep_symbolize_keys
 
+            # Mostra a mensagem chegando pingada em tempo real (opcional)
+            Rails.logger.info("📥 Recebido de #{received_topic}: #{payload.inspect}")
+
             mutex.synchronize { buffer << payload }
 
+            # Despacha se bater o limite do batch
             dispatch_batch.call("Lote Cheio") if buffer.size >= batch_size
           rescue JSON::ParserError
             Rails.logger.error("🗑️ JSON Inválido no tópico #{received_topic}: #{message}")
@@ -89,16 +111,12 @@ namespace :mqtt do
         end
 
       rescue SocketError, Timeout::Error, MQTT::ProtocolException, Errno::ECONNREFUSED => e
-        # Se o Mosquitto cair, a task NÃO MORRE. Ela cai aqui, espera 5 segundos e tenta de novo.
+        # Se a conexão cair, a task NÃO MORRE. Ela espera 5s e tenta de novo.
         Rails.logger.error("🔥 Queda de conexão MQTT: #{e.message}. Tentando reconectar em 5s...")
-
-        # Avisa o Sentry/Rollbar (Descomente quando tiver conta lá)
-        # Sentry.capture_exception(e)
-
         sleep 5
       rescue StandardError => e
         Rails.logger.fatal("💥 Erro fatal desconhecido: #{e.message}")
-        sleep 5 # Previne um loop infinito de consumo de CPU de 100%
+        sleep 5 # Previne consumo CPU de 100%
       end
     end
   end

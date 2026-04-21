@@ -9,6 +9,8 @@ module Waste
              foreign_key: "waste_bin_id",
              dependent: :destroy
 
+    before_save :sync_status, if: :level_changed?
+
     enum :status, {
       normal: "normal",
       warning: "warning",
@@ -22,5 +24,11 @@ module Waste
 
     # Unicidade da lixeira DENTRO da prefeitura específica
     validates :label, uniqueness: { scope: :tenant_id }
+
+    private
+
+    def sync_status
+      self.status = Waste::BinStatusResolver.call(level)
+    end
   end
 end
