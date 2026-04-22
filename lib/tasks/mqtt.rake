@@ -1,122 +1,114 @@
-# lib/tasks/mqtt.rake
 namespace :mqtt do
-  desc "Listener MQTT Enterprise para SaaS (Auto-reconnect, Micro-batching, QoS 1, Heartbeat)"
+  desc "Listener MQTT Enterprise - Modelo Unificado (ID no Body)"
   task listen: :environment do
     require "mqtt"
+    require "digest"
 
-    # 1. CONFIGURAÇÕES DINÂMICAS VIA .ENV (SaaS não hardcoda configuração)
-    # Por padrão, usa o localhost para dev local, mas lê do .env para a nuvem
+    # 1. CONFIGURAÇÕES
     mqtt_host  = ENV.fetch("MQTT_HOST", "localhost")
     mqtt_port  = ENV.fetch("MQTT_PORT", 8883).to_i
-    mqtt_user  = ENV.fetch("MQTT_USER", nil)
-    mqtt_pass  = ENV.fetch("MQTT_PASSWORD", nil)
-    topic      = ENV.fetch("MQTT_TOPIC", "topico/meu_topico")
-    batch_size = ENV.fetch("MQTT_BATCH_SIZE", 50).to_i
-    max_wait   = ENV.fetch("MQTT_MAX_WAIT_SECONDS", 5).to_i
+    mqtt_user  = ENV["MQTT_USER"]
+    mqtt_pass  = ENV["MQTT_PASSWORD"]
 
-    buffer = []
-    last_flush = Time.current
-    mutex = Mutex.new
-    running = true # Flag de controle de vida do processo
+    # AJUSTE: Ouve 'telemetry/QUALQUER_TENANT/bins'
+    # O '+' é o coringa para o código da prefeitura
+    topic = ENV.fetch("MQTT_TOPIC", "telemetry/+/bins")
 
-    Rails.logger = Logger.new($stdout) # Força o log pro console do Docker/Terminal
-    Rails.logger.info("📡 Iniciando MQTT Listener [SaaS Mode] - Host: #{mqtt_host}:#{mqtt_port}")
+    running = true
+    Rails.logger = Logger.new($stdout)
+    Rails.logger.info("📡 Iniciando MQTT Listener (SaaS Mode) - Tópico: #{topic}")
 
-    # 2. O CAMINHÃO DE LIXO (APENAS DEBUG COM PUTS)
-    dispatch_batch = ->(reason) do
-      batch_to_send = []
+    client_id = ENV.fetch("MQTT_CLIENT_ID") { "ecotrack_#{Rails.env}_#{Socket.gethostname}" }
 
-      mutex.synchronize do
-        return if buffer.empty?
-        batch_to_send = buffer.dup
-        buffer.clear
-        last_flush = Time.current
-      end
+    client = MQTT::Client.new(
+      host: mqtt_host,
+      port: mqtt_port,
+      username: mqtt_user,
+      password: mqtt_pass,
+      ssl: mqtt_port == 8883,
+      client_id: client_id
+    )
+    client.clean_session = false
 
-      # Apenas imprime no console para confirmar que deu certo!
-      puts "\n========================================="
-      puts "✅ DEU CERTO! Lote processado com sucesso!"
-      puts "📦 Motivo do despacho: #{reason}"
-      puts "📊 Quantidade de mensagens no lote: #{batch_to_send.size}"
-      puts "📝 Dados recebidos:"
-      puts batch_to_send.inspect
-      puts "=========================================\n"
-    end
-
-    # 3. GRACEFUL SHUTDOWN
+    # 2. SHUTDOWN SEGURO
     %w[INT TERM].each do |signal|
       trap(signal) do
-        Rails.logger.warn("🛑 Recebido sinal #{signal}. Iniciando Desligamento Elegante...")
-        running = false # Avisa a thread principal para parar de tentar reconectar
-        dispatch_batch.call("Shutdown")
+        Rails.logger.warn("🛑 Encerrando Listener MQTT graciosamente...")
+        running = false
         exit(0)
       end
     end
 
-    # 4. O CRONÔMETRO DE EMERGÊNCIA E HEARTBEAT
+    # 3. LÓGICA DE BUFFER (PERFORMANCE)
+    insert_buffer = []
+    last_flush = Time.current
+    BATCH_INSERT_SIZE = ENV.fetch("MQTT_DB_BATCH_SIZE", 10).to_i # Lote de 10 para testes rápidos
+    MAX_WAIT = ENV.fetch("MQTT_DB_MAX_WAIT", 2).to_i
+
+    flush_to_db = lambda do |reason|
+      return if insert_buffer.empty?
+
+      begin
+        # Insere em massa ignorando duplicatas (Idempotência)
+        MqttMessage.insert_all(insert_buffer, unique_by: :event_id)
+
+        # 🔥 GATILHO: Notifica o Solid Queue que há trabalho novo
+        MqttBatchProcessorJob.perform_later
+
+        Rails.logger.info("📦 Flush DB (#{reason}) - #{insert_buffer.size} msgs persistidas.")
+        insert_buffer.clear
+        last_flush = Time.current
+      rescue StandardError => e
+        Rails.logger.error("💥 Erro ao salvar no banco: #{e.message}")
+      end
+    end
+
+    # Thread de Vigilância (Timeout)
     Thread.new do
       loop do
         sleep 1
         break unless running
-
-        # Verifica se precisa fechar o lote por tempo
-        if (Time.current - last_flush) >= max_wait
-          dispatch_batch.call("Timeout (#{max_wait}s)")
+        if insert_buffer.any? && (Time.current - last_flush) >= MAX_WAIT
+          flush_to_db.call("timeout")
         end
-
-        # HEARTBEAT: Avisa a infraestrutura que este processo não travou (Deadlock)
-        # O Docker/K8s pode checar esse arquivo para saber se precisa matar e reiniciar o container
-        File.write(Rails.root.join("tmp/mqtt_heartbeat.txt"), Time.current.to_s)
       end
     end
 
-# 5. LOOP DE AUTO-RECONNECT (O Motor Inquebrável)
-# Configuração que suporta broker local ou na nuvem (HiveMQ)
-client = MQTT::Client.new(
-  host: mqtt_host,
-  port: mqtt_port,
-  username: mqtt_user,
-  password: mqtt_pass,
-  ssl: mqtt_port == 8883,
-  client_id: "ecotrack_api_#{Rails.env}_#{SecureRandom.hex(4)}" # ID Único e Persistente
-)
-
-    client.clean_session = false # Ajuda a não perder msgs no QoS 1 se a conexão cair rápido
-
+    # 4. LOOP DE LEITURA
     while running
       begin
         unless client.connected?
-          Rails.logger.info("🔄 Conectando ao broker MQTT...")
           client.connect
-          # Assina o tópico exigindo QoS 1 (Garante a entrega)
-          client.subscribe(topic, 1)
-          Rails.logger.info("✅ Conectado e escutando: #{topic}")
+          client.subscribe(topic, 1) # QoS 1 garante a entrega
+          Rails.logger.info("✅ Conectado ao HiveMQ!")
         end
 
-        # client.get bloqueia a thread esperando mensagens
         client.get do |received_topic, message|
           begin
-            payload = JSON.parse(message).deep_symbolize_keys
+            payload = JSON.parse(message)
 
-            # Mostra a mensagem chegando pingada em tempo real (opcional)
-            Rails.logger.info("📥 Recebido de #{received_topic}: #{payload.inspect}")
+            # Idempotência: Gera ID único baseado no conteúdo se não houver um no JSON
+            event_id = payload["id"] || Digest::SHA256.hexdigest("#{received_topic}-#{message}-#{Time.current.to_f}")
 
-            mutex.synchronize { buffer << payload }
+            insert_buffer << {
+              event_id: event_id,
+              topic: received_topic,
+              payload: payload, # Aqui o Rails salva o JSON completo (incluindo o bin_id)
+              status: "new",
+              retry_count: 0,
+              created_at: Time.current,
+              updated_at: Time.current
+            }
 
-            # Despacha se bater o limite do batch
-            dispatch_batch.call("Lote Cheio") if buffer.size >= batch_size
+            flush_to_db.call("batch_size") if insert_buffer.size >= BATCH_INSERT_SIZE
+
           rescue JSON::ParserError
-            Rails.logger.error("🗑️ JSON Inválido no tópico #{received_topic}: #{message}")
+            Rails.logger.error("🗑️ JSON inválido em #{received_topic}")
           end
         end
-
-      rescue SocketError, Timeout::Error, MQTT::ProtocolException, Errno::ECONNREFUSED => e
-        # Se a conexão cair, a task NÃO MORRE. Ela espera 5s e tenta de novo.
-        Rails.logger.error("🔥 Queda de conexão MQTT: #{e.message}. Tentando reconectar em 5s...")
-        sleep 5
       rescue StandardError => e
-        Rails.logger.fatal("💥 Erro fatal desconhecido: #{e.message}")
-        sleep 5 # Previne consumo CPU de 100%
+        Rails.logger.error("🔥 Erro na conexão: #{e.message}. Reconectando em 5s...")
+        sleep 5
       end
     end
   end

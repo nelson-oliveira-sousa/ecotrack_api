@@ -1,4 +1,3 @@
-# config/database.yml
 default: &default
   adapter: postgresql
   encoding: unicode
@@ -8,5 +7,15 @@ default: &default
   password: <%= ENV.fetch("POSTGRES_PASSWORD", "") %>
 
 development:
-  <<: *default
-  database: <%= ENV.fetch("POSTGRES_DB", "ecotrack_development") %>
+  # Configuração do banco principal (suas lixeiras, tenants, etc)
+  primary:
+    <<: *default
+    database: <%= ENV.fetch("POSTGRES_DB", "ecotrack_development") %>
+
+  # 🔥 ADICIONE ISSO AQUI: Configuração para o Solid Queue
+  queue:
+    <<: *default
+    database: <%= ENV.fetch("POSTGRES_DB", "ecotrack_development") %>
+    # O segredo está aqui: ele usa um schema diferente ou o mesmo banco,
+    # mas o Rails precisa saber que ele é o responsável pela fila.
+    migrations_paths: db/queue_migrate

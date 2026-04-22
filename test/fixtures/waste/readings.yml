@@ -1,0 +1,11 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  bin: one
+  level: 1
+  status: MyString
+
+two:
+  bin: two
+  level: 1
+  status: MyString

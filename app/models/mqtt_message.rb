@@ -1,28 +1,24 @@
 class MqttMessage < ApplicationRecord
-  # 1. Máquina de Estados: Usamos strings para os enums para facilitar
-  # a leitura direta no banco de dados (PgWeb).
+  # Adicionamos 'prefix: true' para evitar conflito com métodos internos do Rails
+  # Agora os métodos serão: message.status_new?, message.status_processing?, etc.
   enum :status, {
-    new: "new",             # Acabou de chegar e aguarda o Worker
-    processing: "processing", # Sendo processada por um Worker (travada)
-    processed: "processed",   # Finalizada com sucesso
-    failed: "failed"          # Esgotou as tentativas (Dead Letter Queue)
-  }, default: :new
+    new: "new",
+    processing: "processing",
+    processed: "processed",
+    failed: "failed"
+  }, prefix: true, default: :new
 
-  # 2. Validações: Blindagem dos dados
   validates :event_id, presence: true, uniqueness: true
   validates :topic, presence: true
   validates :payload, presence: true
 
-  # 3. Scope de Especialista: O "Cérebro" da Fila
-  # Esse scope garante que o Worker pegue apenas o que deve ser processado agora.
+  # O scope também precisa ser ajustado se você for usar o nome do enum
   scope :ready_for_processing, -> {
-    where(status: :new)
+    status_new # Usa o scope gerado pelo prefixo
       .where("next_attempt_at IS NULL OR next_attempt_at <= ?", Time.current)
       .order(created_at: :asc)
   }
 
-  # 4. Helper para JSONB
-  # O Rails já trata jsonb como um Hash, mas isso garante que nunca seja nil.
   def payload
     super || {}
   end
