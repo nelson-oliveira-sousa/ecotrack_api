@@ -1,6 +1,10 @@
-# app/models/current.rb
 class Current < ActiveSupport::CurrentAttributes
-  # Aqui definimos os atributos que queremos que fiquem
-  # "pendurados" na thread da requisição.
-  attribute :user, :tenant
+  # Adicionamos o tenant_id aqui para o ApplicationJob conseguir usar
+  attribute :user, :tenant, :tenant_id
+
+  # Sobrescrevemos o setter para garantir que o ID mude junto com o objeto
+  def tenant=(tenant)
+    super
+    self.tenant_id = tenant&.id
+  end
 end

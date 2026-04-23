@@ -27,8 +27,6 @@ module Waste
     # Unicidade da lixeira DENTRO da prefeitura específica
     validates :label, uniqueness: { scope: :tenant_id }
 
-    private
-
     def sync_status
       self.status = Waste::BinStatusResolver.call(level)
     end

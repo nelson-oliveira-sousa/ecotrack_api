@@ -1,6 +1,7 @@
 version: '3.8'
 
 services:
+  # 🐘 Banco de Dados: PostgreSQL 16
   db:
     image: postgres:16-alpine
     container_name: ecotrack_db
@@ -8,12 +9,13 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-ecotrack_development}
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  # 🔎 PGWeb: Interface para você debugar o banco no navegador (Porta 8081)
   pgweb:
     image: sosedoff/pgweb
     container_name: ecotrack_pgweb
@@ -21,19 +23,55 @@ services:
     ports:
       - "8081:8081"
     environment:
-      PGWEB_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-ecotrack_development}?sslmode=disable
     depends_on:
       - db
 
-  # 3. O Simulador de Nuvem IoT (Broker MQTT)
-  mqtt:
-    image: eclipse-mosquitto:2.0
-    container_name: ecotrack_mqtt
-    restart: unless-stopped
+  # 🌐 API Rails: O core que atende o Dashboard e o App Mobile
+  api:
+    build: .
+    container_name: ecotrack_api
+    command: bash -c "rm -f tmp/pids/server.pid && ./bin/rails server -b 0.0.0.0"
     ports:
-      - "1883:1883"
+      - "3000:3000"
     volumes:
-      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - .:/rails
+    environment:
+      RAILS_ENV: development
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-ecotrack_development}
+    env_file: .env
+    depends_on:
+      - db
+
+  # ⚙️ Worker MQTT: Ingestão de telemetria conectada ao HiveMQ Cloud
+  mqtt_worker:
+    build: .
+    container_name: ecotrack_mqtt_worker
+    command: ./bin/mqtt_worker
+    restart: unless-stopped
+    volumes:
+      - .:/rails
+    environment:
+      RAILS_ENV: development
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-ecotrack_development}
+    env_file: .env
+    depends_on:
+      - db
+
+  # 🧠 Jobs (Solid Queue): Processa as mensagens do MQTT e aciona a IA
+  jobs:
+    build: .
+    container_name: ecotrack_jobs
+    command: ./bin/jobs
+    restart: unless-stopped
+    volumes:
+      - .:/rails
+    environment:
+      RAILS_ENV: development
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-ecotrack_development}
+    env_file: .env
+    depends_on:
+      - db
 
 volumes:
   postgres_data:

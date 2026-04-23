@@ -1,6 +1,7 @@
 class MqttMessage < ApplicationRecord
-  # Adicionamos 'prefix: true' para evitar conflito com métodos internos do Rails
-  # Agora os métodos serão: message.status_new?, message.status_processing?, etc.
+  # 🔥 ESSENCIAL: Sem isso, o Rails não sabe quem é o dono da mensagem
+  belongs_to :tenant
+
   enum :status, {
     new: "new",
     processing: "processing",
@@ -12,9 +13,8 @@ class MqttMessage < ApplicationRecord
   validates :topic, presence: true
   validates :payload, presence: true
 
-  # O scope também precisa ser ajustado se você for usar o nome do enum
   scope :ready_for_processing, -> {
-    status_new # Usa o scope gerado pelo prefixo
+    status_new
       .where("next_attempt_at IS NULL OR next_attempt_at <= ?", Time.current)
       .order(created_at: :asc)
   }

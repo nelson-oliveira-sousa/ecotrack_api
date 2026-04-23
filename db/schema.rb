@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_21_235122) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_23_225722) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -23,10 +23,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_21_235122) do
     t.datetime "processing_at"
     t.integer "retry_count", default: 0
     t.string "status", default: "new", null: false
+    t.bigint "tenant_id", null: false
     t.string "topic", null: false
     t.datetime "updated_at", null: false
     t.index ["event_id"], name: "index_mqtt_messages_on_event_id", unique: true
     t.index ["status", "next_attempt_at", "created_at"], name: "idx_mqtt_messages_worker_flow"
+    t.index ["tenant_id"], name: "index_mqtt_messages_on_tenant_id"
   end
 
   create_table "revoked_tokens", force: :cascade do |t|
@@ -225,6 +227,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_21_235122) do
     t.index ["bin_id"], name: "index_waste_readings_on_bin_id"
   end
 
+  add_foreign_key "mqtt_messages", "tenants"
   add_foreign_key "solid_queue_blocked_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_claimed_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_failed_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
