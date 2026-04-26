@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_23_225722) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_26_222120) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -205,6 +205,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_23_225722) do
 
   create_table "waste_bins", force: :cascade do |t|
     t.text "ai_prediction"
+    t.integer "battery"
     t.datetime "created_at", null: false
     t.string "label"
     t.datetime "last_analysis_at"
@@ -219,6 +220,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_23_225722) do
   end
 
   create_table "waste_readings", force: :cascade do |t|
+    t.integer "battery"
     t.bigint "bin_id", null: false
     t.datetime "created_at", null: false
     t.integer "level"

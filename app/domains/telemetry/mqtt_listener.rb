@@ -25,7 +25,7 @@ module Telemetry
 
       MQTT::Client.connect(@mqtt_config) do |client|
         # Ouve todos os dispositivos: telemetry/CODIGO_TENANT/bins
-        client.subscribe(ENV.fetch("MQTT_TOPIC", "telemetry/+/bins"), 1)
+        client.subscribe(ENV.fetch("MQTT_TOPIC", "topico/meu_topico"), 1)
 
         while @running
           client.get do |topic, message|
@@ -43,8 +43,8 @@ module Telemetry
 
     def handle_message(topic, message)
       # 1. Extração do Tenant via Tópico (telemetry/MSPXRAKH/bins)
-      tenant_code = topic.split("/")[1]
-      tenant = Tenant.find_by(code: tenant_code)
+      # tenant_code = topic.split("/")[1]
+      tenant = Tenant.find_by(code: "MSPXRAKH")
 
       unless tenant
         Rails.logger.warn "⚠️ Mensagem ignorada: Tenant '#{tenant_code}' não cadastrado."
