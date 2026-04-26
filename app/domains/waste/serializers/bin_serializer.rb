@@ -5,12 +5,12 @@ module Waste
         {
           id: bin.id,
           name: bin.label, # De -> Para (Banco -> Frontend)
-          district: bin.district,
+          # district: bin.district,
           level: bin.level,
           battery: bin.battery, # O dado preditivo!
           status: bin.status,
           route_name: "Não Atribuída", # Deixaremos fixo até criarmos o Módulo Logístico
-          address: bin.address,
+          # address: bin.address,
           updated_at: bin.updated_at,
           last_collection: bin.last_collection,
           location: {

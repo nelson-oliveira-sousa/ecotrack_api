@@ -1,18 +1,17 @@
+# app/domains/waste/services/collect_bin_service.rb
 module Waste
   module Services
     class CollectBinService
       def self.call(bin:, collected_at: nil)
-        collection_time = collected_at || Time.current
-
-        # Regra de negócio: Zera o nível, atualiza status e registra a data da coleta
+        # 1. Atualiza o estado atual da lixeira
+        # Certifique-se que o enum no model Bin foi corrigido de 'colleected' para 'collected'
         success = bin.update(
           level: 0,
-          status: "collected",
-          last_collection: collection_time
+          status: "collected"
         )
 
-        # Cria um histórico para mostrar que foi esvaziada
         if success
+          # 2. Registra o evento de coleta no histórico (Readings)
           bin.readings.create!(
             level: 0,
             status: "collected",

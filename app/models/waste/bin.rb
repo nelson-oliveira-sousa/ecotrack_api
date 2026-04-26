@@ -17,6 +17,7 @@ module Waste
       normal: "normal",
       warning: "warning",
       critical: "critical",
+      collected: "collected",
       offline: "offline"
     }, default: :normal
 
@@ -38,6 +39,10 @@ module Waste
       # 2. Só analisa se nunca foi analisada OU se a última análise foi há mais de 30 min
       # Isso evita criar uma fila gigante de Jobs desnecessários
       last_analysis_at.nil? || last_analysis_at < 30.minutes.ago
+    end
+
+    def last_collection
+      readings.where(status: "collected").order(created_at: :desc).first&.created_at
     end
   end
 end
