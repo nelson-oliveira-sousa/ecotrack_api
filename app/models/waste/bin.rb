@@ -7,7 +7,8 @@ module Waste
     has_one :bin_address,
             class_name: "Waste::BinAddress",
             foreign_key: :waste_bin_id,
-            dependent: :destroy
+            dependent: :destroy,
+            inverse_of: :waste_bin
 
     has_many :raw_readings,
              class_name: "Telemetry::RawReading",

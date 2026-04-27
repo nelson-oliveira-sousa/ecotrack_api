@@ -42,28 +42,38 @@ module Telemetry
     private
 
     def handle_message(topic, message)
-      # 1. Extração do Tenant via Tópico (telemetry/MSPXRAKH/bins)
-      # tenant_code = topic.split("/")[1]
-      tenant = Tenant.find_by(code: "MSPXRAKH")
-
-      unless tenant
-        Rails.logger.warn "⚠️ Mensagem ignorada: Tenant '#{tenant_code}' não cadastrado."
-        return
-      end
-
-      # 2. Define o contexto para que o Job e o Log saibam quem é o dono do dado
-      Current.tenant = tenant
-
       begin
         payload = JSON.parse(message)
+
+        # 1. No ChirpStack, o identificador único do sensor (devEui)
+        # vem dentro do nó deviceInfo.
+        dev_eui = payload.dig("deviceInfo", "devEui")
+
+        # 2. Buscamos a lixeira pelo dev_eui que configuramos na migration.
+        # Isso elimina a necessidade de hardcode ou de extrair código do tópico.
+        bin = Waste::Bin.find_by(dev_eui: dev_eui)
+
+        unless bin
+          Rails.logger.warn "⚠️ Mensagem ignorada: Dispositivo LoRaWAN '#{dev_eui}' não cadastrado."
+          return
+        end
+
+        # 3. O Tenant agora é dinâmico! Ele vem da lixeira encontrada.
+        tenant = bin.tenant
+        Current.tenant = tenant
+
         @mutex.synchronize do
+          # Mantemos sua lógica de buffer de alta performance
           @insert_buffer << build_message_hash(topic, payload, tenant.id)
         end
+
         flush_if_needed
       rescue JSON::ParserError
         Rails.logger.error "🗑️ Payload inválido recebido de #{topic}"
+      rescue => e
+        Rails.logger.error "🔥 Erro ao processar mensagem do ChirpStack: #{e.message}"
       ensure
-        # Limpa o contexto para a próxima mensagem do loop
+        # Limpa o contexto para a próxima mensagem do loop (essencial para concorrência)
         Current.reset
       end
     end

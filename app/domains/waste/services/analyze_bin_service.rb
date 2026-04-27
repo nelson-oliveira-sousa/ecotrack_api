@@ -13,14 +13,22 @@ module Waste
         # 2. Monta o Prompt
         # Sendo específico sobre o formato JSON para o Gemini 2.5 Flash-Lite
         prompt = <<~PROMPT
-          Você é um especialista em logística urbana.
-          Analise o histórico de enchimento desta lixeira inteligente: #{history_data}.
-          Nível atual: #{bin.level}%.
+          Você é um motorista de caminhão de lixo especialista em rotas otimizadas.
+          CONTEXTO:
+          - Lixeira ID: #{bin.id} (#{bin.label})
+          - Histórico (Hora: Nível): #{history_data}
+          - Nível Atual: #{bin.level}%
+          - Horário de agora: #{Time.current.strftime('%H:%M')}
 
-          Responda obrigatoriamente no formato JSON:
+          TAREFA:
+          1. Analise a velocidade de enchimento.
+          2. Preveja quantos minutos faltam para atingir 100%. Se já estiver cheia ou diminuindo, retorne 0.
+          3. Crie uma análise de uma frase para o operador.
+
+          RETORNO OBRIGATÓRIO EM JSON:
           {
             "previsao_cheia_em_minutos": integer,
-            "analise": "string curta com a tendência"
+            "analise": "string"
           }
         PROMPT
 

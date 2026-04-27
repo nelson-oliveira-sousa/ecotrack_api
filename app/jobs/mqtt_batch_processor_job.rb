@@ -1,13 +1,12 @@
 class MqttBatchProcessorJob < ApplicationJob
   queue_as :default
 
-  # Garante que apenas um worker processe esse lote por vez,
-  # evitando que mensagens duplicadas ou fora de ordem causem inconsistência.
+  # Mantemos a concorrência limitada para garantir a ordem das leituras
   limits_concurrency to: 1, key: "mqtt_batch_processor", duration: 5.minutes
 
   def perform
-    # 1. Busca mensagens pendentes usando o scope e o prefixo de status
-    messages = MqttMessage.status_new.ready_for_processing.limit(100)
+    # Busca mensagens pendentes (status: :new)
+    messages = MqttMessage.status_new.limit(100)
 
     return if messages.empty?
 
@@ -15,48 +14,52 @@ class MqttBatchProcessorJob < ApplicationJob
       process_message(msg)
     end
 
-    # 2. Se ainda houver mensagens 'new', chama a si mesmo para continuar o fluxo
+    # Recursão para limpar a fila se houver muito volume
     MqttBatchProcessorJob.perform_later if MqttMessage.status_new.any?
   end
 
   private
+
   def process_message(msg)
     msg.status_processing!
+    payload = msg.payload
 
-    # tenant_code = msg.topic.split("/")[1]
-    tenant_code = "MSPXRAKH" # FIXO PARA TESTE, DEPOIS VOLTA O DINÂMICO
-    bin_id   = msg.payload["bin_id"]
-    new_level   = msg.payload["level"]
+    # 1. Extração no padrão ChirpStack
+    dev_eui   = payload.dig("deviceInfo", "devEui")
+    telemetry = payload["object"] || {}
 
-    bin = Waste::Bin.joins(:tenant).find_by!(tenants: { code: tenant_code }, id: bin_id)
+    new_level     = telemetry["level"]
+    battery_level = telemetry["battery"] || 100
 
-    batery_level = msg.payload["battery"] || 100
+    # 2. Busca a lixeira pelo Identificador Global (dev_eui)
+    # Aqui o tenant já vem "de brinde" pela associação
+    bin = Waste::Bin.find_by!(dev_eui: dev_eui)
 
-    # 🔥 ATUALIZAÇÃO SÊNIOR:
-    # Usamos uma transação para garantir que ou salva tudo, ou nada.
+    # 🔥 ATUALIZAÇÃO SÊNIOR: Transação Atômica
     ActiveRecord::Base.transaction do
-      # 1. Atualiza o "Estado Atual" (para o Dashboard ser rápido)
-      bin.update!(level: new_level, battery: batery_level)
+      # Atualiza o estado atual da lixeira
+      bin.update!(level: new_level, battery: battery_level)
 
-      # 2. Cria o "Histórico" (para a IA analisar)
+      # Cria o registro histórico para os gráficos e IA
       bin.readings.create!(
         level: new_level,
-        status: bin.status, # O status já foi resolvido pelo callback before_save do bin,
-        battery: batery_level
+        status: bin.status,
+        battery: battery_level
       )
 
+      # Dispara a IA apenas se necessário
       if bin.analysis_needed?
         Waste::AiAnalysisJob.perform_later(bin.id)
       end
     end
 
     msg.update!(status: :processed, processed_at: Time.current)
+
   rescue ActiveRecord::RecordNotFound
-    # Erro específico: Evita travar o job se o ESP32 mandar lixo de um ID que não existe
-    msg.update!(status: :failed, retry_count: msg.retry_count + 1)
-    Rails.logger.error "❌ Lixeira ID #{payload['bin_id']} não encontrada para o tenant #{tenant_code}"
+    msg.update!(status: :failed, error_log: "DevEUI #{dev_eui} não encontrado")
+    Rails.logger.error "❌ Dispositivo #{dev_eui} não cadastrado."
   rescue => e
-    msg.update!(status: :failed, retry_count: msg.retry_count + 1)
+    msg.update!(status: :failed, error_log: e.message)
     Rails.logger.error "❌ Erro no processamento: #{e.message}"
   end
 end

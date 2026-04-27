@@ -1,5 +1,5 @@
 puts "🌱 Limpando banco de dados (Respeitando integridade)..."
-# Ordem de destruição respeitando as Foreign Keys do seu schema
+Waste::BinAddress.destroy_all # Importante limpar os endereços primeiro!
 Waste::Reading.destroy_all
 Telemetry::RawReading.destroy_all
 Waste::Bin.destroy_all
@@ -12,7 +12,6 @@ puts "========================================"
 puts "👑 1. CRIANDO USUÁRIO DO SISTEMA (MASTER)"
 puts "========================================"
 
-# Super Admin: O dono da plataforma. tenant_id é nil.
 super_admin = User.create!(
   name: 'Nelson Master',
   email: 'nelson@suaempresa.com.br',
@@ -26,15 +25,13 @@ puts "========================================"
 puts "🏢 2. PROVISIONANDO CLIENTE: GUAIÇARA"
 puts "========================================"
 
-# Criando o Tenant (Prefeitura)
 guaicara = Tenant.create!(
   name: 'Prefeitura de Guaiçara',
   code: '12345678000199',
   slug: 'guaicara',
-  status: 1 # Assumindo 1 como active no enum de status
+  status: 1
 )
 
-# Criando o Perfil Detalhado (tabela tenant_profiles)
 TenantProfile.create!(
   tenant: guaicara,
   document: '12.345.678/0001-99',
@@ -42,7 +39,6 @@ TenantProfile.create!(
   contact_phone: '1433334444'
 )
 
-# Criando o Admin da Prefeitura (O Maurício)
 User.create!(
   tenant: guaicara,
   name: 'Maurício Prefeito',
@@ -50,43 +46,64 @@ User.create!(
   password: 'SenhaDaPrefeitura!123',
   role: 'admin'
 )
-puts "✅ Prefeitura de Guaiçara provisionada com sucesso."
+puts "✅ Prefeitura de Guaiçara provisionada."
 
 puts "========================================"
-puts "🗑️ 3. CADASTRANDO LIXEIRAS (WASTE_BINS)"
+puts "🗑️ 3. CADASTRANDO LIXEIRAS (LO-RA-WAN)"
 puts "========================================"
 
-# Usando o namespace correto Waste::Bin que aponta para waste_bins
+# Agora usamos dev_eui e bin_address_attributes (Nested Attributes)
 Waste::Bin.create!([
   {
     tenant: guaicara,
     label: 'Praça Matriz',
+    dev_eui: '0011223344556601', # Identificador para o ChirpStack
     level: 5,
     status: 'normal',
-    latitude: -21.8364,
-    longitude: -49.8861,
-    battery: 98
+    battery: 98,
+    bin_address_attributes: {
+      address: 'Praça Matriz',
+      number: 'S/N',
+      neighborhood: 'Centro',
+      city: 'Guaiçara',
+      state: 'SP',
+      zip_code: '16430-000'
+    }
   },
   {
     tenant: guaicara,
     label: 'Escola Municipal',
+    dev_eui: '0011223344556602',
     level: 45,
     status: 'normal',
-    latitude: -21.8350,
-    longitude: -49.8850,
-    battery: 82
+    battery: 82,
+    bin_address_attributes: {
+      address: 'Rua Olavo Bilac',
+      number: '120',
+      neighborhood: 'Vila Nova',
+      city: 'Guaiçara',
+      state: 'SP',
+      zip_code: '16430-000'
+    }
   },
   {
     tenant: guaicara,
     label: 'Pronto Socorro',
+    dev_eui: '0011223344556603',
     level: 88,
     status: 'critical',
-    latitude: -21.8375,
-    longitude: -49.8870,
-    battery: 12
+    battery: 12,
+    bin_address_attributes: {
+      address: 'Rua Tiradentes',
+      number: '450',
+      neighborhood: 'Centro',
+      city: 'Guaiçara',
+      state: 'SP',
+      zip_code: '16430-000'
+    }
   }
 ])
 
-puts "✅ #{Waste::Bin.where(tenant: guaicara).count} lixeiras criadas para Guaiçara."
+puts "✅ #{Waste::Bin.where(tenant: guaicara).count} lixeiras criadas com endereços e DevEUIs."
 puts "========================================"
-puts "🚀 AMBIENTE PRONTO: Mãos à obra!"
+puts "🚀 AMBIENTE SMART CITY PRONTO!"

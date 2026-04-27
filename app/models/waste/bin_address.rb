@@ -1,7 +1,7 @@
 module Waste
   class BinAddress < ApplicationRecord
     # Relacionamento com a lixeira
-    belongs_to :waste_bin, class_name: "Waste::Bin"
+    belongs_to :waste_bin, class_name: "Waste::Bin", inverse_of: :bin_address
 
     # Validações de presença para garantir que a localização seja útil para o motorista
     validates :address, :neighborhood, :city, :state, presence: true
