@@ -1,0 +1,17 @@
+[postgresql]
+dsn="postgres://chirpstack:chirpstack@db/chirpstack?sslmode=disable"
+
+[redis]
+url="redis://redis:6379/"
+
+[network]
+net_id="000000"
+enabled_regions=["au915_0"]
+
+[api]
+bind="0.0.0.0:8080"
+secret="ecotrack-secret-key"
+
+[integration.mqtt]
+server="tcp://mosquitto:1883/"
+json=true

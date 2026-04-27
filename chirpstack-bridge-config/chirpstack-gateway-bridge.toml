@@ -1,0 +1,6 @@
+[integration.mqtt]
+event_topic_template="au915_0/gateway/{{ .GatewayID }}/event/{{ .EventType }}"
+command_topic_template="au915_0/gateway/{{ .GatewayID }}/command/#"
+
+[integration.mqtt.auth.generic]
+server="tcp://mosquitto:1883"
