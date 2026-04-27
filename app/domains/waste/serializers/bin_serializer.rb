@@ -2,21 +2,30 @@ module Waste
   module Serializers
     class BinSerializer
       def self.render(bin)
-        {
+       {
           id: bin.id,
-          name: bin.label, # De -> Para (Banco -> Frontend)
-          # district: bin.district,
+          name: bin.label,
           level: bin.level,
-          battery: bin.battery, # O dado preditivo!
+          battery: bin.battery,
           status: bin.status,
-          route_name: "Não Atribuída", # Deixaremos fixo até criarmos o Módulo Logístico
-          # address: bin.address,
-          updated_at: bin.updated_at,
-          last_collection: bin.last_collection,
+          dev_eui: bin.dev_eui, # Importante para debug técnico
+
+          # 🔥 OS CAMPOS DA IA (O grande diferencial da demo)
+          ai_insight: bin.ai_prediction,
+          predicted_full_at: bin.predicted_full_at&.strftime("%H:%M"),
+          last_analysis_at: bin.last_analysis_at,
+
+          route_name: "Não Atribuída",
+
+          # 📍 ENDEREÇO E LOCALIZAÇÃO (Buscando da tabela associada)
+          address: bin.full_address,
           location: {
-            latitude: bin.latitude,
-            longitude: bin.longitude
-          }
+            latitude: bin.bin_address&.latitude,
+            longitude: bin.bin_address&.longitude
+          },
+
+          updated_at: bin.updated_at,
+          last_collection: bin.last_collection
         }
       end
 
