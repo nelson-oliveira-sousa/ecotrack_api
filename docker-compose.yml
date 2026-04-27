@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # 🐘 Banco de Dados: PostgreSQL 16
+  # 🐘 PostgreSQL
   db:
     image: postgres:16-alpine
     container_name: ecotrack_db
@@ -9,13 +9,39 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-ecotrack_development}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ecotrack_development
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
 
-  # 🔎 PGWeb: Interface para você debugar o banco no navegador (Porta 8081)
+  # 🔴 Redis
+  redis:
+    image: redis:7-alpine
+    container_name: ecotrack_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  # 📡 MQTT Broker
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: ecotrack_mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    command: >
+      sh -c "
+      echo 'listener 1883 0.0.0.0' > /mosquitto/config/mosquitto.conf &&
+      echo 'allow_anonymous true' >> /mosquitto/config/mosquitto.conf &&
+      /usr/sbin/mosquitto -c /mosquitto/config/mosquitto.conf
+      "
+
+  # 🌐 PGWeb
   pgweb:
     image: sosedoff/pgweb
     container_name: ecotrack_pgweb
@@ -23,11 +49,11 @@ services:
     ports:
       - "8081:8081"
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-ecotrack_development}?sslmode=disable
+      DATABASE_URL: postgres://postgres:postgres@db:5432/ecotrack_development?sslmode=disable
     depends_on:
       - db
 
-  # 🌐 API Rails: O core que atende o Dashboard e o App Mobile
+  # 🚀 API Rails
   api:
     build: .
     container_name: ecotrack_api
@@ -38,12 +64,16 @@ services:
       - .:/rails
     environment:
       RAILS_ENV: development
-      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-ecotrack_development}
+      DATABASE_URL: postgres://postgres:postgres@db:5432/ecotrack_development
+      REDIS_URL: redis://redis:6379/0
+      MQTT_HOST: mosquitto
     env_file: .env
     depends_on:
       - db
+      - redis
+      - mosquitto
 
-  # ⚙️ Worker MQTT: Ingestão de telemetria conectada ao HiveMQ Cloud
+  # ⚙️ Worker MQTT
   mqtt_worker:
     build: .
     container_name: ecotrack_mqtt_worker
@@ -53,12 +83,14 @@ services:
       - .:/rails
     environment:
       RAILS_ENV: development
-      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-ecotrack_development}
+      DATABASE_URL: postgres://postgres:postgres@db:5432/ecotrack_development
+      MQTT_HOST: mosquitto
     env_file: .env
     depends_on:
       - db
+      - mosquitto
 
-  # 🧠 Jobs (Solid Queue): Processa as mensagens do MQTT e aciona a IA
+  # 🧠 Jobs
   jobs:
     build: .
     container_name: ecotrack_jobs
@@ -68,10 +100,29 @@ services:
       - .:/rails
     environment:
       RAILS_ENV: development
-      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-ecotrack_development}
+      DATABASE_URL: postgres://postgres:postgres@db:5432/ecotrack_development
+      REDIS_URL: redis://redis:6379/0
     env_file: .env
     depends_on:
       - db
+      - redis
+
+  # 🛰️ ChirpStack
+  chirpstack:
+    image: chirpstack/chirpstack:4
+    container_name: ecotrack_chirpstack
+    restart: unless-stopped
+    command: --config /etc/chirpstack
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./docker/chirpstack:/etc/chirpstack
+    depends_on:
+      - db
+      - redis
+      - mosquitto
 
 volumes:
   postgres_data:
+  mosquitto_data:
+  mosquitto_log:

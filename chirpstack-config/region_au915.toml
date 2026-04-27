@@ -5,7 +5,7 @@ common_name="AU915"
 
 [regions.network]
 installation_margin=10
-rx_window=0
+rx_window=1
 rx1_delay=1
 rx1_dr_offset=0
 rx2_dr=8

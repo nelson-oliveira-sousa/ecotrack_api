@@ -1,17 +1,16 @@
-[postgresql]
-dsn="postgres://chirpstack:chirpstack@db/chirpstack?sslmode=disable"
+[database]
+dsn="postgres://ecotrack_user:ecotrack_super_secret@db:5432/chirpstack?sslmode=disable"
 
 [redis]
-url="redis://redis:6379/"
+servers=["redis://redis:6379"]
 
 [network]
 net_id="000000"
 enabled_regions=["au915_0"]
 
+[mqtt]
+server="tcp://mosquitto:1883"
+
 [api]
 bind="0.0.0.0:8080"
 secret="ecotrack-secret-key"
-
-[integration.mqtt]
-server="tcp://mosquitto:1883/"
-json=true
