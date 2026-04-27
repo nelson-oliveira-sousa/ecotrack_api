@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_26_230857) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_27_124648) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -203,19 +203,32 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_26_230857) do
     t.index ["tenant_id"], name: "index_users_on_tenant_id"
   end
 
+  create_table "waste_bin_addresses", force: :cascade do |t|
+    t.string "address"
+    t.string "city"
+    t.datetime "created_at", null: false
+    t.string "neighborhood"
+    t.string "number"
+    t.string "state"
+    t.datetime "updated_at", null: false
+    t.bigint "waste_bin_id", null: false
+    t.string "zip_code"
+    t.index ["waste_bin_id"], name: "index_waste_bin_addresses_on_waste_bin_id"
+  end
+
   create_table "waste_bins", force: :cascade do |t|
     t.text "ai_prediction"
     t.integer "battery"
     t.datetime "created_at", null: false
+    t.string "dev_eui"
     t.string "label"
     t.datetime "last_analysis_at"
-    t.decimal "latitude"
     t.integer "level"
-    t.decimal "longitude"
     t.datetime "predicted_full_at"
     t.string "status"
     t.bigint "tenant_id", null: false
     t.datetime "updated_at", null: false
+    t.index ["dev_eui"], name: "index_waste_bins_on_dev_eui", unique: true
     t.index ["tenant_id"], name: "index_waste_bins_on_tenant_id"
   end
 
@@ -239,6 +252,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_26_230857) do
   add_foreign_key "telemetry_raw_readings", "waste_bins"
   add_foreign_key "tenant_profiles", "tenants"
   add_foreign_key "users", "tenants"
+  add_foreign_key "waste_bin_addresses", "waste_bins"
   add_foreign_key "waste_bins", "tenants"
   add_foreign_key "waste_readings", "waste_bins", column: "bin_id"
 end

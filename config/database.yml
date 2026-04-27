@@ -2,8 +2,8 @@ default: &default
   adapter: postgresql
   encoding: unicode
   pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
-  host: <%= ENV.fetch("POSTGRES_HOST", "localhost") %>
-  user: <%= ENV.fetch("POSTGRES_USER", "postgres") %>
+  host: <%= ENV.fetch("POSTGRES_HOST", "db") %> # Aqui o padrão é 'db' para o Docker
+  username: <%= ENV.fetch("POSTGRES_USER", "postgres") %> # Mude 'user' para 'username'
   password: <%= ENV.fetch("POSTGRES_PASSWORD", "") %>
 
 development:

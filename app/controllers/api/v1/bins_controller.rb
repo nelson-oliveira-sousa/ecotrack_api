@@ -38,6 +38,13 @@ module Api
       rescue ActiveRecord::RecordNotFound
         render json: Waste::Serializers::BinSerializer.render_not_found, status: :not_found
       end
+
+      def bin_params
+        params.require(:bin).permit(
+          :label, :dev_eui, :status, :battery,
+          bin_address_attributes: [ :address, :number, :neighborhood, :city, :state, :zip_code ]
+        )
+      end
     end
   end
 end

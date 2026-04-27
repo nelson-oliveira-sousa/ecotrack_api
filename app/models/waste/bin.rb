@@ -1,8 +1,13 @@
-# app/models/waste/bin.rb
 module Waste
   class Bin < ApplicationRecord
-    # Relacionamento Sênior
+    # Relacionamentos
     belongs_to :tenant
+
+    # Nova relação com a tabela de endereço separada
+    has_one :bin_address,
+            class_name: "Waste::BinAddress",
+            foreign_key: :waste_bin_id,
+            dependent: :destroy
 
     has_many :raw_readings,
              class_name: "Telemetry::RawReading",
@@ -11,6 +16,10 @@ module Waste
 
     has_many :readings, class_name: "Waste::Reading", dependent: :destroy
 
+    # Permite criar/atualizar o endereço junto com a lixeira
+    accepts_nested_attributes_for :bin_address, update_only: true
+
+    # Callbacks
     before_save :sync_status, if: :level_changed?
 
     enum :status, {
@@ -21,23 +30,34 @@ module Waste
       offline: "offline"
     }, default: :normal
 
-    # Validações
+    # Validações Sênior
     validates :label, presence: true
     validates :tenant, presence: true
 
-    # Unicidade da lixeira DENTRO da prefeitura específica
+    # O DevEUI é obrigatório e único para integração com ChirpStack
+    validates :dev_eui, presence: true, uniqueness: true, format: { with: /\A[0-9a-fA-F]{16}\z/ }
+
+    # Unicidade da lixeira por label dentro da mesma prefeitura
     validates :label, uniqueness: { scope: :tenant_id }
+
+    # Delegação para facilitar o acesso ao endereço formatado
+    def full_address
+      return "Endereço não cadastrado" unless bin_address
+
+      [
+        bin_address.address,
+        bin_address.number,
+        bin_address.neighborhood,
+        "#{bin_address.city}/#{bin_address.state}"
+      ].compact.join(", ")
+    end
 
     def sync_status
       self.status = Waste::BinStatusResolver.call(level)
     end
 
     def analysis_needed?
-      # 1. Só analisa se estiver acima do limite crítico
       return false if level < 80
-
-      # 2. Só analisa se nunca foi analisada OU se a última análise foi há mais de 30 min
-      # Isso evita criar uma fila gigante de Jobs desnecessários
       last_analysis_at.nil? || last_analysis_at < 30.minutes.ago
     end
 
