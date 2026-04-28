@@ -1,5 +1,7 @@
 #!/usr/bin/env ruby
+puts "🚀 Script iniciado..." # Adicione isso aqui
 require_relative "../config/environment"
+puts "💎 Rails carregado..."  # E isso aqui
 
 # Permite que o log apareça em tempo real no console/Docker
 $stdout.sync = true
