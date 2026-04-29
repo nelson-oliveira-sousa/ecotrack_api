@@ -23,6 +23,24 @@ Rails.application.routes.draw do
           patch :collect # PATCH /api/v1/bins/:id/collect
         end
       end
+
+      resources :trucks do
+        member do
+          patch :location, to: "trucks#update_location" # PATCH /api/v1/trucks/:id/location
+        end
+      end
+
+      resources :routes, only: [] do
+        collection do
+          get :today # GET /api/v1/routes/today
+        end
+
+        member do
+          post :start # POST /api/v1/routes/:id/start
+          # A URL complexa de paragens: POST /api/v1/routes/:id/stops/:bin_id/collect
+          post "stops/:bin_id/collect", to: "routes#collect_stop"
+        end
+      end
     end
   end
 end

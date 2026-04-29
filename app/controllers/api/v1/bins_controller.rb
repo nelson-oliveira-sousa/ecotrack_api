@@ -1,3 +1,4 @@
+# app/controllers/api/v1/bins_controller.rb
 module Api
   module V1
     class BinsController < ApiController
@@ -14,6 +15,21 @@ module Api
       # GET /api/v1/bins/:id
       def show
         render json: Waste::Serializers::BinSerializer.render(@bin), status: :ok
+      end
+
+      # POST /api/v1/bins
+      def create
+        # Garante o isolamento: a lixeira nasce vinculada ao Tenant atual
+        @bin = Current.tenant.waste_bins.new(bin_params)
+
+        # Define 0 (vazia) para lixeiras novas se o frontend não enviar
+        @bin.level ||= 0
+
+        if @bin.save
+          render json: Waste::Serializers::BinSerializer.render(@bin), status: :created
+        else
+          render json: Waste::Serializers::BinSerializer.render_errors(@bin), status: :unprocessable_entity
+        end
       end
 
       # PATCH /api/v1/bins/:id/collect
@@ -40,9 +56,10 @@ module Api
       end
 
       def bin_params
+        # CORRIGIDO: Substituído :dev_eui por :sensor_id e adicionadas coordenadas
         params.require(:bin).permit(
-          :label, :dev_eui, :status, :battery,
-          bin_address_attributes: [ :address, :number, :neighborhood, :city, :state, :zip_code ]
+          :label, :sensor_id, :status, :battery,
+          bin_address_attributes: [ :address, :number, :neighborhood, :city, :state, :zip_code, :latitude, :longitude ]
         )
       end
     end

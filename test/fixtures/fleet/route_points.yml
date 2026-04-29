@@ -1,0 +1,15 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  route: one
+  waste_bin: one
+  position: 1
+  collected: false
+  collected_at: 2026-04-29 15:35:34
+
+two:
+  route: two
+  waste_bin: two
+  position: 1
+  collected: false
+  collected_at: 2026-04-29 15:35:34
