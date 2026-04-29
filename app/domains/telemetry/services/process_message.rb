@@ -27,6 +27,7 @@ module Telemetry
         {
           bin_id: payload[:bin_id],
           level: payload[:level].to_f,
+          batery: payload[:battery].to_f,
           timestamp: Time.zone.now
         }
       end

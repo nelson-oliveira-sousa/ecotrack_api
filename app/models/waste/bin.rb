@@ -35,8 +35,7 @@ module Waste
     validates :label, presence: true
     validates :tenant, presence: true
 
-    # O DevEUI é obrigatório e único para integração com ChirpStack
-    validates :dev_eui, presence: true, uniqueness: true, format: { with: /\A[0-9a-fA-F]{16}\z/ }
+    validates :sensor_id, presence: true, uniqueness: true
 
     # Unicidade da lixeira por label dentro da mesma prefeitura
     validates :label, uniqueness: { scope: :tenant_id }

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_27_141846) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_29_135615) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -222,15 +222,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_27_141846) do
     t.text "ai_prediction"
     t.integer "battery"
     t.datetime "created_at", null: false
-    t.string "dev_eui"
     t.string "label"
     t.datetime "last_analysis_at"
     t.integer "level"
     t.datetime "predicted_full_at"
+    t.string "sensor_id"
     t.string "status"
     t.bigint "tenant_id", null: false
     t.datetime "updated_at", null: false
-    t.index ["dev_eui"], name: "index_waste_bins_on_dev_eui", unique: true
+    t.index ["sensor_id"], name: "index_waste_bins_on_sensor_id", unique: true
     t.index ["tenant_id"], name: "index_waste_bins_on_tenant_id"
   end
 

@@ -57,7 +57,7 @@ Waste::Bin.create!([
   {
     tenant: guaicara,
     label: 'Praça Matriz',
-    dev_eui: '0011223344556601', # Identificador para o ChirpStack
+    sensor_id: '0011223344556601', # Identificador para o ChirpStack
     level: 5,
     status: 'normal',
     battery: 98,
@@ -73,7 +73,7 @@ Waste::Bin.create!([
   {
     tenant: guaicara,
     label: 'Escola Municipal',
-    dev_eui: '0011223344556602',
+    sensor_id: '0011223344556602',
     level: 45,
     status: 'normal',
     battery: 82,
@@ -89,7 +89,7 @@ Waste::Bin.create!([
   {
     tenant: guaicara,
     label: 'Pronto Socorro',
-    dev_eui: '0011223344556603',
+    sensor_id: '0011223344556603',
     level: 88,
     status: 'critical',
     battery: 12,
@@ -104,6 +104,6 @@ Waste::Bin.create!([
   }
 ])
 
-puts "✅ #{Waste::Bin.where(tenant: guaicara).count} lixeiras criadas com endereços e DevEUIs."
+puts "✅ #{Waste::Bin.where(tenant: guaicara).count} lixeiras criadas com endereços e Sensor IDs."
 puts "========================================"
 puts "🚀 AMBIENTE SMART CITY PRONTO!"
