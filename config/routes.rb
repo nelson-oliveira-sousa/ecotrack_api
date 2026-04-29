@@ -7,15 +7,20 @@ Rails.application.routes.draw do
       delete "logout", to: "authentication#logout"
       get "me", to: "authentication#me"
 
-      # Domínio de Tenants - Refatorado para GET com Path Param
-      # Isso gera: GET /api/v1/tenants/guaicara-sp/validate
+      # Domínio de Tenants (Prefeituras)
+      # ADICIONADO: Permite o POST /api/v1/tenants
+      resources :tenants, only: [ :create ]
+
+      # GET /api/v1/tenants/guaicara-sp/validate
       get "tenants/:slug/validate", to: "tenants#validate"
 
+      # Dashboard
       get "dashboard/summary", to: "analytics#summary"
 
+      # Lixeiras
       resources :bins, only: [ :index, :show ] do
         member do
-          patch :collect # Gera a rota PATCH /api/v1/bins/:id/collect
+          patch :collect # PATCH /api/v1/bins/:id/collect
         end
       end
     end
