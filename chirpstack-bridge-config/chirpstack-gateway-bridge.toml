@@ -1,6 +1,0 @@
-[integration.mqtt]
-event_topic_template="application/{{ .ApplicationID }}/device/{{ .DevEUI }}/event/{{ .EventType }}"
-command_topic_template="application/{{ .ApplicationID }}/device/{{ .DevEUI }}/command/{{ .CommandType }}"
-
-[integration.mqtt.auth.generic]
-server="tcp://mosquitto:1883"

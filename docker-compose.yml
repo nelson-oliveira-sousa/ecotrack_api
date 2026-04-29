@@ -14,7 +14,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-ecotrack_development}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 5s
@@ -35,47 +34,6 @@ services:
       db:
         condition: service_healthy
 
-  # 🔴 Redis: Cache e suporte ao ChirpStack
-  redis:
-    image: redis:7-alpine
-    container_name: ecotrack_redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-
-  # 📡 Mosquitto (Broker Central Unificado)
-  mosquitto:
-    image: eclipse-mosquitto:2
-    container_name: ecotrack_mosquitto
-    restart: unless-stopped
-    ports:
-      - "1883:1883"
-    volumes:
-      - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
-      - mosquitto_data:/mosquitto/data
-
-  # 🛰️ ChirpStack Network Server
-  chirpstack:
-    image: chirpstack/chirpstack:4
-    container_name: ecotrack_chirpstack
-    command: -c /etc/chirpstack
-    restart: unless-stopped
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./chirpstack-config:/etc/chirpstack
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      mosquitto:
-        condition: service_started
-
 
 volumes:
   postgres_data:
-  mosquitto_data:

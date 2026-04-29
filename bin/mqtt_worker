@@ -1,9 +1,36 @@
 #!/usr/bin/env ruby
-puts "🚀 Script iniciado..." # Adicione isso aqui
-require_relative "../config/environment"
-puts "💎 Rails carregado..."  # E isso aqui
+# bin/mqtt_worker
 
 # Permite que o log apareça em tempo real no console/Docker
 $stdout.sync = true
 
-Telemetry::MqttListener.new.start
+puts "🚀 Iniciando EcoTrack MQTT Worker..."
+
+# Carrega o ambiente do Rails para ter acesso aos modelos e serviços
+require_relative "../config/environment"
+
+puts "💎 Rails environment carregado com sucesso."
+
+begin
+  # 1. Inicializa o processador (Lógica de Domínio)
+  # Ele cuidará do parsing, identificação do Bin/Tenant e do buffer de banco.
+  processor = Telemetry::Services::MqttProcessor.new
+
+  # 2. Inicializa o assinante (Adapter de Infraestrutura)
+  # Passamos o processador como dependência seguindo o padrão de Injeção de Dependência.
+  subscriber = Mqtt::Subscriber.new(processor: processor)
+
+  puts "📡 Conectando ao HiveMQ..."
+  puts "📝 Tópico assinado: #{ENV.fetch('MQTT_TOPIC', 'telemetry/+/bins')}"
+
+  # Inicia o loop de escuta
+  subscriber.start
+
+rescue Interrupt
+  puts "\n🛑 Encerrando worker de forma graciosa..."
+  # O flush final é garantido pelo método ensure no Subscriber ou Processor
+  exit(0)
+rescue => e
+  Rails.logger.fatal "🔥 Erro fatal no Worker: #{e.message}\n#{e.backtrace.join("\n")}"
+  exit(1)
+end
