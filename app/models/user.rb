@@ -17,6 +17,8 @@ class User < ApplicationRecord
     collector:   "collector"
   }
 
+  enum :status, { active: 1, inactive: 0, suspended: 2 }
+
   validates :email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }
 
   # A unicidade com scope continua perfeita.

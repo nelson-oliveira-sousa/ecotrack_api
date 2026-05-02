@@ -10,9 +10,65 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_29_135615) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_30_173420) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
+
+  create_table "alerts", force: :cascade do |t|
+    t.bigint "alertable_id"
+    t.string "alertable_type"
+    t.integer "category", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.string "message", null: false
+    t.integer "severity", default: 1, null: false
+    t.integer "status", default: 0, null: false
+    t.bigint "tenant_id", null: false
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.index ["alertable_type", "alertable_id"], name: "index_alerts_on_alertable"
+    t.index ["tenant_id", "status"], name: "index_alerts_on_tenant_id_and_status"
+    t.index ["tenant_id"], name: "index_alerts_on_tenant_id"
+  end
+
+  create_table "fleet_route_points", force: :cascade do |t|
+    t.boolean "collected", default: false
+    t.datetime "collected_at"
+    t.datetime "created_at", null: false
+    t.integer "position", default: 0
+    t.bigint "route_id", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "waste_bin_id", null: false
+    t.index ["route_id", "position"], name: "index_fleet_route_points_on_route_id_and_position"
+    t.index ["route_id"], name: "index_fleet_route_points_on_route_id"
+    t.index ["waste_bin_id"], name: "index_fleet_route_points_on_waste_bin_id"
+  end
+
+  create_table "fleet_routes", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.date "date", null: false
+    t.bigint "driver_id", null: false
+    t.boolean "locked", default: false
+    t.string "name", null: false
+    t.integer "status", default: 0
+    t.bigint "tenant_id", null: false
+    t.bigint "truck_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["driver_id"], name: "index_fleet_routes_on_driver_id"
+    t.index ["tenant_id"], name: "index_fleet_routes_on_tenant_id"
+    t.index ["truck_id"], name: "index_fleet_routes_on_truck_id"
+  end
+
+  create_table "fleet_trucks", force: :cascade do |t|
+    t.integer "capacity"
+    t.datetime "created_at", null: false
+    t.decimal "current_lat", precision: 10, scale: 6
+    t.decimal "current_lng", precision: 10, scale: 6
+    t.string "plate"
+    t.integer "status", default: 0
+    t.bigint "tenant_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["tenant_id"], name: "index_fleet_trucks_on_tenant_id"
+  end
 
   create_table "mqtt_messages", force: :cascade do |t|
     t.datetime "created_at", null: false
@@ -244,6 +300,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_29_135615) do
     t.index ["bin_id"], name: "index_waste_readings_on_bin_id"
   end
 
+  add_foreign_key "alerts", "tenants"
+  add_foreign_key "fleet_route_points", "fleet_routes", column: "route_id"
+  add_foreign_key "fleet_route_points", "waste_bins"
+  add_foreign_key "fleet_routes", "fleet_trucks", column: "truck_id"
+  add_foreign_key "fleet_routes", "tenants"
+  add_foreign_key "fleet_routes", "users", column: "driver_id"
+  add_foreign_key "fleet_trucks", "tenants"
   add_foreign_key "mqtt_messages", "tenants"
   add_foreign_key "solid_queue_blocked_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_claimed_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade

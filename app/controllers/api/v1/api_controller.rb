@@ -6,6 +6,7 @@ module Api
       # Tranca absolutamente todas as rotas que herdarem deste controller.
       # Apenas controllers específicos (como o de Login) farão o 'skip'.
       before_action :authorize_request
+      before_action :check_user_status!
 
       private
 
@@ -35,6 +36,14 @@ module Api
         end
 
         render_unauthorized unless @current_user && Current.tenant
+      end
+
+      def check_user_status!
+        if current_user && !current_user.active?
+          render json: {
+            error: "Sua conta está desativada ou suspensa. Contate o administrador."
+          }, status: :forbidden
+        end
       end
 
       def extract_token

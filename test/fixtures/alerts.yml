@@ -1,0 +1,21 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  title: MyString
+  message: MyString
+  severity: 1
+  status: 1
+  category: 1
+  alertable: one
+  alertable_type: Alertable
+  tenant: one
+
+two:
+  title: MyString
+  message: MyString
+  severity: 1
+  status: 1
+  category: 1
+  alertable: two
+  alertable_type: Alertable
+  tenant: two
