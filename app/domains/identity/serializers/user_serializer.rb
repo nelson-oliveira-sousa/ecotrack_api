@@ -3,22 +3,21 @@ module Identity
   module Serializers
     class UserSerializer
       def self.render(user, options = {})
+        return {} unless user
+
         payload = {
           id: user.id,
           name: user.name,
           email: user.email,
+          role: user.role,
           status: user.status,
-          role: user.role
+          tenant_id: user.tenant_id,
+          created_at: user.created_at
         }
 
-        if options[:include_force_change]
-          payload[:force_password_change] = user.force_password_change
-        end
-
-        # Só incluímos se a senha temporária existir (ex: no momento do create)
-        if options[:temporary_password].present?
-          payload[:temporary_password] = options[:temporary_password]
-        end
+        # Campos opcionais para Login e Cadastro
+        payload[:force_password_change] = user.force_password_change if options[:include_force_change]
+        payload[:temporary_password] = options[:temporary_password] if options[:temporary_password].present?
 
         payload
       end

@@ -16,19 +16,19 @@ module Api
           params: user_params
         )
 
-        if result.success?
+        if result[:success]
           render json: {
             message: "Usuário criado com sucesso!",
             user: Identity::Serializers::UserSerializer.render(
-              result.user,
+              result[:user],
               include_force_change: true,
-              temporary_password: result.temporary_password
+              temporary_password: result[:temporary_password]
             )
           }, status: :created
         else
           render json: {
             error: "Erro ao criar usuário!",
-            details: result.errors }, status: :unprocessable_entity
+            details: result[:errors] }, status: :unprocessable_entity
         end
       end
 

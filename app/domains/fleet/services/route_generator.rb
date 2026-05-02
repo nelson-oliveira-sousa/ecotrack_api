@@ -8,36 +8,40 @@ module Fleet
 
       def initialize(tenant)
         @tenant = tenant
+        @channel = "alerts_tenant_#{@tenant.id}" # O exato canal que seu SSE escuta[cite: 1]
       end
 
       def call
-        # 1. Busca Lixeiras que precisam de coleta
-        bins = @tenant.waste_bins.where("level >= ?", 50).includes(:bin_address)
+        broadcast_update("processing", "Iniciando varredura de lixeiras críticas...")
 
-        # 2. Busca Camiões disponíveis (e emparelha com motoristas disponíveis)
+        # 1. Busca Lixeiras (Nível >= 50% ou Status Critical/1)[cite: 1]
+        bins = @tenant.waste_bins.where("level >= ? OR status = ?", 50, 1).includes(:bin_address)
         trucks = @tenant.trucks.where(status: :available)
-        drivers = @tenant.users.where(role: "driver") # Simplificação: pega motoristas da prefeitura
+        drivers = @tenant.users.where(role: :driver) # Corrigido para símbolo (enum)[cite: 1]
 
-        return { error: "Lixeiras insuficientes" } if bins.empty?
-        return { error: "Sem camiões disponíveis" } if trucks.empty?
-        return { error: "Sem motoristas disponíveis" } if drivers.empty?
+        if bins.empty? || trucks.empty? || drivers.empty?
+          broadcast_update("error", "Recursos insuficientes (lixeiras, caminhões ou motoristas).")
+          return { error: "Recursos insuficientes" }
+        end
 
-        # 3. Passa para o Gemini atuar como Gestor de Frota
+        broadcast_update("processing", "Consultando inteligência artificial (Gemini) para otimização VRP...")
+
+        # 2. Passa para o Gemini
         routes_allocation = optimize_multi_fleet_with_ai(bins, trucks)
 
-        # 4. Criação atómica das múltiplas rotas no banco de dados
+        broadcast_update("processing", "IA finalizou. Salvando rotas no banco de dados...")
         created_routes = []
 
+        # 3. Criação atómica das múltiplas rotas[cite: 1]
         ActiveRecord::Base.transaction do
           routes_allocation.each_with_index do |(truck_id, bin_ids), index|
             truck = trucks.find { |t| t.id == truck_id.to_i }
-            driver = drivers[index % drivers.size] # Distribui motoristas pelos camiões
+            driver = drivers[index % drivers.size]
 
             next unless truck && bin_ids.any?
 
-            # Cria a Rota Travada para este Camião
             route = @tenant.routes.create!(
-              name: "Rota Automação - #{truck.plate} - #{Time.current.strftime('%d/%m')}",
+              name: "Rota Smart - #{truck.plate} - #{Time.current.strftime('%d/%m')}",
               date: Date.current,
               truck: truck,
               driver: driver,
@@ -45,7 +49,6 @@ module Fleet
               locked: true
             )
 
-            # Adiciona os pontos (lixeiras) na ordem definida pelo Gemini
             bin_ids.each_with_index do |bin_id, pos|
               bin = bins.find { |b| b.id == bin_id.to_i }
               route.route_points.create!(waste_bin: bin, position: pos + 1) if bin
@@ -55,17 +58,27 @@ module Fleet
           end
         end
 
+        # 4. Serializa as rotas criadas para enviar pro Frontend
+        serialized_routes = created_routes.as_json(
+          include: {
+            route_points: { include: { waste_bin: { only: [ :id, :label, :level, :status ] } } }
+          }
+        )
+
+        # AVISA O FRONTEND QUE ACABOU E ENTREGA OS DADOS!
+        broadcast_update("route_ready", "Rotas geradas e otimizadas com sucesso!", serialized_routes)
+
         { success: true, routes: created_routes }
+      rescue => e
+        broadcast_update("error", "Erro no gerador: #{e.message}")
+        { success: false, error: e.message }
       end
 
       private
 
       def optimize_multi_fleet_with_ai(bins, trucks)
         prompt = construct_vrp_prompt(bins, trucks)
-
-        response = Ai::GeminiClient.new.generate(prompt)
-
-        # Esperamos um hash do tipo: { "1": [5, 12], "2": [3, 8] }
+        response = Ai::GeminiClient.new.generate(prompt) # Usando seu Adapter[cite: 1]
         response.is_a?(Hash) ? response : fallback_allocation(bins, trucks)
       end
 
@@ -83,25 +96,31 @@ module Fleet
           REGRAS OBRIGATÓRIAS:
           1. Divida espacialmente as lixeiras: Lixeiras próximas umas das outras devem ser alocadas ao mesmo caminhão.
           2. Comece a rota considerando o ponto de partida (lat, lng) de cada caminhão.
-          3. Retorne EXCLUSIVAMENTE um objeto JSON válido, onde a chave é o ID do caminhão (em string) e o valor é um array com os IDs das lixeiras na ordem ideal de visita.
-
-          EXEMPLO DE RESPOSTA ESPERADA:
-          {
-            "1": [42, 15, 8],
-            "2": [7, 91]
-          }
+          3. Retorne EXCLUSIVAMENTE um objeto JSON válido, onde a chave é o ID do caminhão (em string) e o valor é um array com os IDs das lixeiras na ordem ideal de visita. Não use blocos de código (markdown).
         PROMPT
       end
 
       def fallback_allocation(bins, trucks)
-        # Fallback caso a IA falhe: divide as lixeiras igualmente pelos camiões sem otimização geográfica
         allocation = {}
         bins_per_truck = bins.each_slice((bins.size / trucks.size.to_f).ceil).to_a
-
         trucks.each_with_index do |truck, index|
           allocation[truck.id.to_s] = bins_per_truck[index]&.map(&:id) || []
         end
         allocation
+      end
+
+      # O MENSAGEIRO: Dispara o NOTIFY pro PostgreSQL[cite: 1]
+      def broadcast_update(event_type, message, data = nil)
+        payload = {
+          event: event_type,
+          message: message,
+          data: data
+        }.compact.to_json
+
+        # Executa o NOTIFY direto no PG. Quem estiver no LISTEN (o controller stream) recebe na hora.
+        ActiveRecord::Base.connection.execute(
+          ActiveRecord::Base.sanitize_sql_array([ "NOTIFY %s, '%s'", @channel, payload ])
+        )
       end
     end
   end

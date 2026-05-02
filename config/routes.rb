@@ -5,15 +5,18 @@ Rails.application.routes.draw do
       # ---------------------------------------------------------
       # 🔓 VIA VERDE (Sem JWT) - Hardware
       # ---------------------------------------------------------
-      # Endpoint livre para o ESP32 do Mauricio enviar os dados
       post "bins/:id/sensor", to: "bins#sensor"
 
       # ---------------------------------------------------------
-      # 🔐 AUTENTICAÇÃO E TENANTS
+      # 🔐 AUTENTICAÇÃO, TENANTS E IDENTIDADE
       # ---------------------------------------------------------
       post "login", to: "authentication#login"
       delete "logout", to: "authentication#logout"
       get "me", to: "authentication#me"
+
+      # [NOVO] Adicionado para o fluxo de Primeiro Acesso (MVP)
+      patch "update_password", to: "passwords#update_password"
+      resources :users, only: [ :create ]
 
       resources :tenants, only: [ :create ]
       get "tenants/:slug/validate", to: "tenants#validate"
@@ -28,7 +31,8 @@ Rails.application.routes.draw do
       # ---------------------------------------------------------
       resources :alerts, only: [ :index ] do
         collection do
-          get :stream # O nosso túnel em tempo real (PostgreSQL LISTEN)
+          # O método def stream ficará no AlertsController
+          get :stream
         end
         member do
           patch :resolve
@@ -46,23 +50,18 @@ Rails.application.routes.draw do
 
       resources :trucks do
         member do
-          # O GPS Mobile envia para cá a cada 30s (Lembre-se de dar skip_before_action no controller)
           patch :location, to: "trucks#update_location"
         end
       end
 
       # ---------------------------------------------------------
-      # 🗺️ ROTAS E TURNOS (IA - Gemini)
+      # 🗺️ ROTAS (IA - Gemini) e OPERAÇÃO
       # ---------------------------------------------------------
-      resources :shifts, only: [ :index ] do
-        member do
-          post :generate # Cérebro: Admin pede para dividir as rotas do turno
-        end
-      end
-
       resources :routes, only: [] do
         collection do
           get :today
+          # [AJUSTADO] Movido para cá para combinar com o RoutesController que fizemos
+          post :generate
         end
         member do
           post :start
@@ -70,12 +69,8 @@ Rails.application.routes.draw do
         end
       end
 
-      # ---------------------------------------------------------
-      # 📱 APP DO MOTORISTA
-      # ---------------------------------------------------------
-      resource :my_route, only: [ :show ] do
-        post :generate # Cérebro: Motorista pede a sua própria rota (síncrono)
-      end
+      # Mantido para futuras implementações focadas em Turnos
+      resources :shifts, only: [ :index ]
     end
   end
 end

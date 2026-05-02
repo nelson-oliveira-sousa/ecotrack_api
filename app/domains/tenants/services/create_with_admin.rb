@@ -2,52 +2,38 @@
 module Tenants
   module Services
     class CreateWithAdmin
-      def self.call(tenant_params:, admin_params:)
-        new(tenant_params, admin_params).call
-      end
+      def self.call(params)
+        tenant = Tenant.new(
+          name: params[:name],
+          code: params[:code],
+          status: :active
+        )
 
-      def initialize(tenant_params, admin_params)
-        @tenant_params = tenant_params
-        @admin_params = admin_params
-      end
+        tenant.build_tenant_profile(params[:profile_attributes])
 
-      def call
-        # Transação garante que ou cria tudo perfeitamente, ou não cria nada.
+        # Prepara o usuário admin daquela prefeitura
+        admin = tenant.users.build(
+          name: params.dig(:admin_attributes, :name),
+          email: params.dig(:admin_attributes, :email),
+          role: :admin,
+          status: :active,
+          force_password_change: true # Cai na trava de segurança que fizemos antes!
+        )
+
+        # Gera senha amigável (ex: 9f2a1b)
+        temp_password = SecureRandom.hex(3)
+        admin.password = temp_password
+
         ActiveRecord::Base.transaction do
-          # 1. Cria a Prefeitura
-          # O code e slug serão gerados SOZINHOS pelos callbacks do model Tenant!
-          @tenant = Tenant.create!(
-            name: @tenant_params[:name],
-            status: :active
-          )
-
-          # 2. Cria o Perfil Fiscal (se houver dados)
-          if @tenant_params[:document].present? || @tenant_params[:contact_email].present?
-            @tenant.create_profile!(
-              document: @tenant_params[:document],
-              contact_email: @tenant_params[:contact_email],
-              contact_phone: @tenant_params[:contact_phone]
-            )
-          end
-
-          # 3. Cria o primeiro Usuário (Admin) vinculado à prefeitura
-          @admin = @tenant.users.create!(
-            name: @admin_params[:name],
-            email: @admin_params[:email],
-            password: @admin_params[:password],
-            role: "admin"
-          )
+          tenant.save!
+          # Se passar daqui, salvou o tenant, o profile e o usuário atrelado a ele.
         end
 
-        # Sucesso: devolve os objetos para o controller renderizar
-        { success: true, tenant: @tenant, admin: @admin }
-
+        { success: true, tenant: tenant, admin: admin, temp_password: temp_password }
       rescue ActiveRecord::RecordInvalid => e
-        # Falha de Validação (ex: senha fraca, nome em branco): Devolve o erro limpo
-        { success: false, error: e.record.errors.full_messages.join(", ") }
+        { success: false, errors: e.record.errors.full_messages }
       rescue => e
-        # Falha Inesperada
-        { success: false, error: "Erro interno: #{e.message}" }
+        { success: false, errors: [ e.message ] }
       end
     end
   end

@@ -1,15 +1,23 @@
 class Rack::Attack
-  # Bloqueia o IP se ele tentar logar mais de 5 vezes em 20 segundos
-  throttle("logins/ip", limit: 5, period: 20.seconds) do |req|
-    if req.path == "/api/v1/login" && req.post?
+  # 1. Throttle por IP (Login e Troca de Senha)
+  throttle("identity/ip", limit: 5, period: 20.seconds) do |req|
+    if req.post? && (req.path == "/api/v1/login" || req.path == "/api/v1/update_password")
       req.ip
     end
   end
 
-  # (Opcional) Bloqueia por e-mail, caso o atacante use IPs rotativos para atacar a mesma conta
-  throttle("logins/email", limit: 5, period: 20.seconds) do |req|
-    if req.path == "/api/v1/login" && req.post?
+  # 2. Throttle por E-mail (Proteção contra IPs rotativos)
+  throttle("identity/email", limit: 5, period: 1.minute) do |req|
+    if req.post? && req.path == "/api/v1/login"
       req.params["email"].to_s.downcase.gsub(/\s+/, "")
     end
+  end
+
+  # 3. Resposta padronizada para o App
+  self.throttled_responder = lambda do |env|
+    [ 429,
+      { "Content-Type" => "application/json" },
+      [ { error: "Muitas tentativas. Tente novamente em alguns minutos.", code: "TOO_MANY_REQUESTS" }.to_json ]
+    ]
   end
 end

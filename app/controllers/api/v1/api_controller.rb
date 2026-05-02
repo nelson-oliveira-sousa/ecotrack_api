@@ -69,6 +69,14 @@ module Api
         end
       end
 
+      def require_superadmin_or_vendedor!
+        unless Current.user && %w[superadmin vendedor].include?(Current.user.role)
+          render json: {
+            error: "Acesso negado. Apenas Superadmins e Vendedores podem provisionar novas prefeituras."
+          }, status: :forbidden
+        end
+      end
+
       def extract_token
         # O token deve ser enviado no header Authorization
         header = request.headers["Authorization"]
