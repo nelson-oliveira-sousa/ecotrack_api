@@ -19,7 +19,11 @@ module Api
         if result.success?
           render json: {
             message: "Usuário criado com sucesso!",
-            user: Identity::Serializers::UserSerializer.render(result.user)
+            user: Identity::Serializers::UserSerializer.render(
+              result.user,
+              include_force_change: true,
+              temporary_password: result.temporary_password
+            )
           }, status: :created
         else
           render json: {

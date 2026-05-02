@@ -1,7 +1,10 @@
+# db/seeds.rb
+
 puts "🌱 Limpando banco de dados (Respeitando integridade)..."
-Waste::BinAddress.destroy_all # Importante limpar os endereços primeiro!
+# Ordem de destruição para evitar erros de chave estrangeira
 Waste::Reading.destroy_all
 Telemetry::RawReading.destroy_all
+Waste::BinAddress.destroy_all
 Waste::Bin.destroy_all
 MqttMessage.destroy_all
 User.destroy_all
@@ -16,7 +19,9 @@ super_admin = User.create!(
   name: 'Nelson Master',
   email: 'nelson@suaempresa.com.br',
   password: 'SenhaSuperForte!2026',
-  role: 'super_admin',
+  role: 'admin', # Ajustado para bater com os enums padrão
+  status: :active,
+  force_password_change: false, # IMPORTANTE: Admin mestre entra sem trava
   tenant_id: nil
 )
 puts "✅ Super Admin criado: #{super_admin.email}"
@@ -28,8 +33,7 @@ puts "========================================"
 guaicara = Tenant.create!(
   name: 'Prefeitura de Guaiçara',
   code: '12345678000199',
-  slug: 'guaicara',
-  status: 1
+  status: :active
 )
 
 TenantProfile.create!(
@@ -44,7 +48,9 @@ User.create!(
   name: 'Maurício Prefeito',
   email: 'mauricio@guaicara.sp.gov.br',
   password: 'SenhaDaPrefeitura!123',
-  role: 'admin'
+  role: 'admin',
+  status: :active,
+  force_password_change: false # Admin da prefeitura também começa liberado
 )
 puts "✅ Prefeitura de Guaiçara provisionada."
 
@@ -52,16 +58,16 @@ puts "========================================"
 puts "🗑️ 3. CADASTRANDO LIXEIRAS (LO-RA-WAN)"
 puts "========================================"
 
-# Agora usamos dev_eui e bin_address_attributes (Nested Attributes)
+# Alinhado com a migração: rename_dev_eui_to_sensor_id_in_waste_bins
 Waste::Bin.create!([
   {
     tenant: guaicara,
     label: 'Praça Matriz',
-    sensor_id: '0011223344556601', # Identificador para o ChirpStack
+    sensor_id: '0011223344556601',
     level: 5,
     status: 'normal',
     battery: 98,
-    bin_address_attributes: {
+    bin_address_attributes: { # Uso de Nested Attributes
       address: 'Praça Matriz',
       number: 'S/N',
       neighborhood: 'Centro',
@@ -104,6 +110,6 @@ Waste::Bin.create!([
   }
 ])
 
-puts "✅ #{Waste::Bin.where(tenant: guaicara).count} lixeiras criadas com endereços e Sensor IDs."
+puts "✅ #{Waste::Bin.where(tenant: guaicara).count} lixeiras criadas."
 puts "========================================"
 puts "🚀 AMBIENTE SMART CITY PRONTO!"

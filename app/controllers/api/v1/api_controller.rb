@@ -7,6 +7,7 @@ module Api
       # Apenas controllers específicos (como o de Login) farão o 'skip'.
       before_action :authorize_request
       before_action :check_user_status!
+      before_action :enforce_password_change!
 
       private
 
@@ -43,6 +44,28 @@ module Api
           render json: {
             error: "Sua conta está desativada ou suspensa. Contate o administrador."
           }, status: :forbidden
+        end
+      end
+
+      def enforce_password_change!
+        # Se não tem usuário logado, ignoramos (o authorize_request já lidou com isso)
+        return unless current_user
+
+        # Verifica se o usuário está com a trava de primeiro acesso ligada
+        if current_user.force_password_change?
+          # Caminhos (endpoints) que o usuário PODE acessar mesmo estando bloqueado
+          allowed_paths = [
+            "/api/v1/update_password",
+            "/api/v1/logout"
+          ]
+
+          # Se ele tentar acessar QUALQUER outra coisa (ex: /my_route, /bins), a API bloqueia!
+          unless allowed_paths.include?(request.path)
+            render json: {
+              error: "Troca de senha obrigatória no primeiro acesso.",
+              code: "MUST_CHANGE_PASSWORD"
+            }, status: :forbidden
+          end
         end
       end
 

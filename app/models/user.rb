@@ -20,6 +20,8 @@ class User < ApplicationRecord
   enum :status, { active: 1, inactive: 0, suspended: 2 }
 
   validates :email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }
+  validates :name, presence: true
+  validates :force_password_change, inclusion: { in: [ true, false ] }
 
   # A unicidade com scope continua perfeita.
   # Vendedores (tenant_id: nil) não podem repetir email entre si.

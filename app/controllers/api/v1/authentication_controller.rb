@@ -1,6 +1,7 @@
 # app/controllers/api/v1/authentication_controller.rb
 class Api::V1::AuthenticationController < Api::V1::ApiController
   skip_before_action :authorize_request, only: :login, raise: false
+  skip_before_action :enforce_password_change!, only: :login
 
   def login
     result = Identity::Services::Authenticator.call(
@@ -12,6 +13,8 @@ class Api::V1::AuthenticationController < Api::V1::ApiController
     # Guard Clause: Se não for sucesso, já era.
     return render json: { error: result[:error] }, status: :unauthorized unless result[:success]
 
+    user_data = result[:data]
+    user_data[:user][:force_password_change] = result[:user].force_password_change
     # Caminho feliz sem else
     render json: result[:data], status: :ok
   end
