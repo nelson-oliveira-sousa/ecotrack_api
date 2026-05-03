@@ -1,20 +1,22 @@
 # app/controllers/api/v1/passwords_controller.rb
-class Api::V1::PasswordsController < Api::V1::ApiController
-  def update_password
-    user = Current.user
+module Api
+  module V1
+    class PasswordsController < Api::V1::ApiController
+      def update_password
+        # O Controller extrai os parâmetros do protocolo HTTP...
+        token = request.headers["Authorization"]&.split(" ")&.last
 
-    unless user.authenticate(params[:current_password])
-      return render json: { error: "Senha atual incorreta." }, status: :unauthorized
-    end
+        # ... e delega para a camada de Domínio.
+        result = Identity::Services::UpdatePassword.call(
+          user: Current.user,
+          current_password: params[:current_password],
+          new_password: params[:new_password],
+          token: token
+        )
 
-    if user.update(password: params[:new_password], force_password_change: false)
-      # Segurança: Invalida o token atual para forçar novo login com a senha nova
-      token = request.headers["Authorization"]&.split(" ")&.last
-      Identity::Services::Revoker.call(token) if token
-
-      render json: { message: "Senha atualizada com sucesso. Por segurança, faça login novamente." }, status: :ok
-    else
-      render json: { error: user.errors.full_messages }, status: :unprocessable_entity
+        # A resposta é devolvida padronizada (success, data, error)
+        render_result(result)
+      end
     end
   end
 end

@@ -2,6 +2,7 @@
 module Api
   module V1
     class ApiController < ApplicationController
+      include ApiResponder
       # 1. POLÍTICA DE NEGAÇÃO POR PADRÃO (Default Deny)
       # Tranca absolutamente todas as rotas que herdarem deste controller.
       # Apenas controllers específicos (como o de Login) farão o 'skip'.

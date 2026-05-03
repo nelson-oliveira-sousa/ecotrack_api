@@ -1,41 +1,55 @@
-# app/controllers/api/v1/authentication_controller.rb
-class Api::V1::AuthenticationController < Api::V1::ApiController
-  skip_before_action :authorize_request, only: :login, raise: false
-  skip_before_action :enforce_password_change!, only: :login
+module Api
+  module V1
+    class AuthenticationController < Api::V1::ApiController
+      skip_before_action :authorize_request, only: :login, raise: false
+      skip_before_action :enforce_password_change!, only: :login
 
-  def login
-    result = Identity::Services::Authenticator.call(
-      tenant_code: params[:tenant_code],
-      email: params[:email],
-      password: params[:password]
-    )
+      # POST /api/v1/auth/login
+      def login
+        # 🚀 O Service faz o trabalho sujo.
+        # Ele deve retornar um Result contendo o token e os dados já serializados no 'data'
+        result = Identity::Services::Authenticator.call(
+          tenant_code: params[:tenant_code],
+          email: params[:email],
+          password: params[:password]
+        )
 
-    # Guard Clause: Se não for sucesso, já era.
-    return render json: { error: result[:error] }, status: :unauthorized unless result[:success]
+        # O ApiResponder lida com o if/else de sucesso e erro automaticamente!
+        render_result(result)
+      end
 
-    user_data = result[:data]
-    user_data[:user][:force_password_change] = result[:user].force_password_change
-    # Caminho feliz sem else
-    render json: result[:data], status: :ok
-  end
+      # DELETE /api/v1/auth/logout
+      def logout
+        token = request.headers["Authorization"]&.split(" ")&.last
 
-  def logout
-    token = request.headers["Authorization"]&.split(" ")&.last
+        if token.blank?
+          return render_result(Result.new(
+            success: false,
+            error: "Token não fornecido",
+            status: :bad_request
+          ))
+        end
 
-    return render json: { error: "Token não fornecido" }, status: :bad_request if token.blank?
+        result = Identity::Services::Revoker.call(token)
 
-    result = Identity::Services::Revoker.call(token)
+        if result.success?
+          # Traduzimos o sucesso "vazio" do Service para uma mensagem amigável de saída
+          render_result(Result.new(success: true, data: { message: "Logout bem-sucedido" }))
+        else
+          render_result(result)
+        end
+      end
 
-    return render json: { error: "Falha ao revogar token" }, status: :unprocessable_entity unless result[:success]
+      # GET /api/v1/auth/me
+      def me
+        # Como o authorize_request já rodou, os dados estão garantidos no Current
+        data = {
+          user: Identity::Serializers::UserSerializer.render(Current.user),
+          tenant: Identity::Serializers::TenantSerializer.render(Current.tenant)
+        }
 
-    render json: { message: "Logout bem-sucedido" }, status: :ok
-  end
-
-  def me
-    # Como o authorize_request já rodou, os dados estão no Current
-    render json: {
-      user: Identity::Serializers::UserSerializer.render(Current.user),
-      tenant: Identity::Serializers::TenantSerializer.render(Current.tenant)
-    }, status: :ok
+        render_result(Result.new(success: true, data: data))
+      end
+    end
   end
 end

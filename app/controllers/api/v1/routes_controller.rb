@@ -1,8 +1,6 @@
-# app/controllers/api/v1/routes_controller.rb
 module Api
   module V1
     class RoutesController < Api::V1::ApiController
-      # Habilita o streaming para a action `stream`
       include ActionController::Live
 
       before_action :set_route, only: [ :start, :collect_stop ]
@@ -11,23 +9,25 @@ module Api
       # 🤖 FASE 1: GERAÇÃO COM INTELIGÊNCIA ARTIFICIAL
       # ==========================================
 
-      # POST /api/v1/routes/generate
       def generate
-        # Enfileira o job passando o ID do Tenant para processamento assíncrono seguro[cite: 1]
         Fleet::GenerateRoutesJob.perform_later(Current.user.tenant.id)
 
-        # Responde HTTP 202 (Accepted) imediatamente, não travando o cliente
-        render json: { message: "Análise de rota enfileirada. Acompanhe o progresso pelo canal de streaming." }, status: :accepted
+        render_result(Result.new(
+          success: true,
+          data: { message: "Análise de rota enfileirada. Acompanhe o progresso pelo canal de streaming." },
+          status: :accepted
+        ))
       end
 
-      # GET /api/v1/routes/stream
       def stream
+        # ⚡ EXCEÇÃO DA ARQUITETURA:
+        # Endpoints de Streaming (SSE) não usam o `render_result` pois não devolvem um JSON único.
+        # Eles mantêm uma conexão aberta enviando múltiplos pacotes de dados.
         response.headers["Content-Type"] = "text/event-stream"
         response.headers["Last-Modified"] = Time.now.httpdate
         response.headers["Cache-Control"] = "no-cache"
         response.headers["X-Accel-Buffering"] = "no"
 
-        # Usa a associação segura de Tenant[cite: 1]
         tenant = Current.user.tenant
         channel = "alerts_tenant_#{tenant.id}"
 
@@ -36,11 +36,9 @@ module Api
 
           begin
             loop do
-              # Fica escutando os eventos do PostgreSQL (timeout de 5 segundos)
               connection.raw_connection.wait_for_notify(5) do |event, pid, payload|
                 response.stream.write("data: #{payload}\n\n")
               end
-              # Keep-alive (Ping de espaço) para o navegador/proxy não fechar a conexão por inatividade
               response.stream.write(":\n\n")
             end
           rescue IOError, ActionController::Live::ClientDisconnected
@@ -56,16 +54,13 @@ module Api
       # 🚚 FASE 2: OPERAÇÃO EM CAMPO (MOTORISTAS)
       # ==========================================
 
-      # GET /api/v1/routes/today
       def today
-        # Traz as rotas de hoje do Tenant, já com os pontos de paragem e lixeiras incluídos (para evitar N+1 queries)[cite: 1]
         routes = Current.user.tenant.routes
                             .where(date: Date.current)
                             .includes(route_points: :waste_bin)
 
-        # Como ainda não temos um Serializer complexo para a rota,
-        # devolvemos a estrutura desenhada nas suas anotações
-        render json: {
+        # O ideal aqui é depois criar um Fleet::Serializers::RouteSerializer
+        data = {
           routes: routes.as_json(
             include: {
               route_points: {
@@ -73,55 +68,43 @@ module Api
               }
             }
           )
-        }, status: :ok
+        }
+
+        render_result(Result.new(success: true, data: data))
       end
 
-      # POST /api/v1/routes/:id/start
       def start
+        # Regras de validação de estado (State Machine) também podem ir para um Service no futuro.
         if @route.planned?
           @route.update!(status: :active)
-          render json: { message: "Rota iniciada com sucesso!", status: @route.status }, status: :ok
+          render_result(Result.new(
+            success: true,
+            data: { message: "Rota iniciada com sucesso!", status: @route.status }
+          ))
         else
-          render json: { error: "Apenas rotas planeadas podem ser iniciadas." }, status: :unprocessable_entity
+          render_result(Result.new(
+            success: false,
+            error: "Apenas rotas planeadas podem ser iniciadas.",
+            status: :unprocessable_entity
+          ))
         end
       end
 
-      # POST /api/v1/routes/:id/stops/:bin_id/collect
       def collect_stop
-        # 1. Validação de Segurança: O camião tem de estar na rua[cite: 1]
-        unless @route.active?
-          return render json: { error: "A rota precisa estar ativa para registar recolhas." }, status: :unprocessable_entity
-        end
+        # 🚀 O Controller agora apenas orquestra! Ele delega o trabalho pesado para o Service.
+        result = Fleet::Services::CollectStop.call(
+          route: @route,
+          bin_id: params[:bin_id]
+        )
 
-        # 2. Encontra a paragem específica desta lixeira dentro da rota[cite: 1]
-        route_point = @route.route_points.find_by(waste_bin_id: params[:bin_id])
-
-        if route_point
-          # 3. Executa a lógica de forma atómica (Tudo ou Nada)[cite: 1]
-          ActiveRecord::Base.transaction do
-            # Marca o ponto da rota como coletado
-            route_point.mark_as_collected!
-
-            # ATENÇÃO: Integração com a Fase 3! Esvazia a lixeira fisicamente no sistema
-            route_point.waste_bin.update!(level: 0)
-          end
-
-          render json: {
-            message: "Lixeira recolhida com sucesso!",
-            bin_id: route_point.waste_bin_id,
-            collected_at: route_point.collected_at
-          }, status: :ok
-        else
-          render json: { error: "Esta lixeira não pertence à rota atual." }, status: :not_found
-        end
+        render_result(result)
       end
 
       private
 
       def set_route
         @route = Current.user.tenant.routes.find(params[:id])
-      rescue ActiveRecord::RecordNotFound
-        render json: { error: "Rota não encontrada." }, status: :not_found
+        # ❌ REMOVIDO: rescue ActiveRecord::RecordNotFound (Nosso ApiResponder resolve isso)
       end
     end
   end

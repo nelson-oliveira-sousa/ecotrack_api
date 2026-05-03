@@ -1,23 +1,32 @@
-# app/domains/identity/services/user_registration.rb
 module Identity
   module Services
-    class UserRegistration
-      def self.call(tenant, params)
-        user = tenant.users.build(params)
+    class UserRegistration < ApplicationService
+      def initialize(tenant:, user_params:)
+        @tenant = tenant
+        @user_params = user_params
+      end
 
-        # Gera uma senha provisória de 6 caracteres (ex: "8f3a9d")
-        temp_password = SecureRandom.hex(3)
+      def call
+        user = @tenant.users.build(@user_params)
         user.password = temp_password
-
-        # A MÁGICA: Liga a trava do primeiro acesso!
         user.force_password_change = true
-        user.status = :active
+        user.status = active_status
 
-        if user.save
-          { success: true, user: user, temp_password: temp_password }
-        else
-          { success: false, errors: user.errors.full_messages }
-        end
+        return success({ user: user, temp_password: user.password }, :created) if user.save
+
+        failure(user.errors.full_messages, :unprocessable_entity)
+      rescue StandardError => e
+        failure("Erro ao registrar usuário: #{e.message}", :internal_server_error)
+      end
+
+      private
+
+      def temp_password
+        SecureRandom.hex(3)
+      end
+
+      def active_status
+        :active
       end
     end
   end

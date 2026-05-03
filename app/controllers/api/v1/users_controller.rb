@@ -1,3 +1,4 @@
+# app/controllers/api/v1/users_controller.rb
 module Api
   module V1
     class UsersController < Api::V1::ApiController
@@ -7,52 +8,57 @@ module Api
       # GET /api/v1/users
       def index
         users = Current.tenant.users
-        render json: { users: Identity::Serializers::UserSerializer.render(users) }, status: :ok
+        data = Identity::Serializers::UserSerializer.render(users)
+
+        # Envolvemos em um Result para garantir o formato do JSON de saída
+        render_result(Result.new(success: true, data: data))
       end
 
+      # POST /api/v1/users
       def create
         result = Identity::Services::UserRegistration.call(
           tenant: Current.tenant,
-          params: user_params
+          user_params: user_params
         )
 
-        if result[:success]
-          render json: {
-            message: "Usuário criado com sucesso!",
-            user: Identity::Serializers::UserSerializer.render(
-              result[:user],
-              include_force_change: true,
-              temporary_password: result[:temporary_password]
-            )
-          }, status: :created
+        if result.success?
+          # O Controller (camada de apresentação) formata a saída do Service
+          serialized_data = Identity::Serializers::UserSerializer.render(
+            result.data[:user],
+            include_force_change: true,
+            temporary_password: result.data[:temp_password]
+          )
+
+          # Renderiza sucesso com os dados serializados
+          render_result(Result.new(success: true, data: serialized_data, status: :created))
         else
-          render json: {
-            error: "Erro ao criar usuário!",
-            details: result[:errors] }, status: :unprocessable_entity
+          # Renderiza a falha repassando o Result original do Service
+          render_result(result)
         end
       end
 
+      # PATCH/PUT /api/v1/users/:id
       def update
-        if @user.update(user_update_params)
-          render json: {
-            message: "Dados atualizados com sucesso.",
-            user: Identity::Serializers::UserSerializer.render(@user)
-          }, status: :ok
+        if @user.update(user_params)
+          data = Identity::Serializers::UserSerializer.render(@user)
+          render_result(Result.new(success: true, data: data))
         else
-          render json: { error: "Falha ao atualizar dados.", details: @user.errors.full_messages }, status: :unprocessable_entity
+          render_result(Result.new(success: false, error: @user.errors.full_messages, status: :unprocessable_entity))
         end
       end
 
+      # DELETE /api/v1/users/:id
       def destroy
         if @user.update(status: :inactive)
-          render json: { message: "Usuário desativado com sucesso." }, status: :ok
+          render_result(Result.new(success: true, data: { message: "Usuário desativado com sucesso." }))
         else
-          render json: { error: "Falha ao desativar usuário.", details: @user.errors.full_messages }, status: :unprocessable_entity
+          render_result(Result.new(success: false, error: @user.errors.full_messages, status: :unprocessable_entity))
         end
       end
 
+      private
+
       def user_update_params
-        # Impede que a senha seja alterada acidentalmente na edição de perfil
         params.require(:user).permit(:name, :email, :role)
       end
     end

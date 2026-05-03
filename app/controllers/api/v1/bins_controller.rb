@@ -1,4 +1,3 @@
-# app/controllers/api/v1/bins_controller.rb
 module Api
   module V1
     class BinsController < ApiController
@@ -6,57 +5,63 @@ module Api
 
       # GET /api/v1/bins
       def index
-        # Garante o isolamento multi-tenant
-        @bins ||= Waste::Bin.where(tenant: Current.tenant)
+        # Usamos a associação direta pelo tenant para garantir o isolamento
+        bins = Current.tenant.waste_bins
 
-        render json: Waste::Serializers::BinSerializer.render_collection(@bins), status: :ok
+        data = Waste::Serializers::BinSerializer.render_collection(bins)
+        render_result(Result.new(success: true, data: data))
       end
 
       # GET /api/v1/bins/:id
       def show
-        render json: Waste::Serializers::BinSerializer.render(@bin), status: :ok
+        data = Waste::Serializers::BinSerializer.render(@bin)
+        render_result(Result.new(success: true, data: data))
       end
 
       # POST /api/v1/bins
       def create
-        # Garante o isolamento: a lixeira nasce vinculada ao Tenant atual
-        @bin = Current.tenant.waste_bins.new(bin_params)
+        bin = Current.tenant.waste_bins.new(bin_params)
 
-        # Define 0 (vazia) para lixeiras novas se o frontend não enviar
-        @bin.level ||= 0
+        # Regra de inicialização simples (o ideal seria colocar no after_initialize do Model Waste::Bin)
+        bin.level ||= 0
 
-        if @bin.save
-          render json: Waste::Serializers::BinSerializer.render(@bin), status: :created
+        if bin.save
+          data = Waste::Serializers::BinSerializer.render(bin)
+          render_result(Result.new(success: true, data: data, status: :created))
         else
-          render json: Waste::Serializers::BinSerializer.render_errors(@bin), status: :unprocessable_entity
+          # Delegamos o array de erros para o padrão Result
+          render_result(Result.new(success: false, error: bin.errors.full_messages, status: :unprocessable_entity))
         end
       end
 
       # PATCH /api/v1/bins/:id/collect
       def collect
-        success = Waste::Services::CollectBinService.call(
+        # 🚀 O Controller apenas orquestra chamando o Service!
+        # NOTA: O CollectBinService precisa ser atualizado para herdar de ApplicationService
+        result = Waste::Services::CollectBinService.call(
           bin: @bin,
           collected_at: params[:collected_at]
         )
 
-        if success
-          # Retorna o JSON atualizado e formatado (nível 0)
-          render json: Waste::Serializers::BinSerializer.render(@bin), status: :ok
+        if result.success?
+          # O Service fez o trabalho, agora o Controller formata a resposta atualizada
+          data = Waste::Serializers::BinSerializer.render(@bin)
+          render_result(Result.new(success: true, data: data, status: :ok))
         else
-          render json: Waste::Serializers::BinSerializer.render_errors(@bin), status: :unprocessable_entity
+          # Repassa a falha estruturada do Service
+          render_result(result)
         end
       end
 
       private
 
       def set_bin
-        @bin ||= Waste::Bin.find_by!(id: params[:id], tenant: Current.tenant)
-      rescue ActiveRecord::RecordNotFound
-        render json: Waste::Serializers::BinSerializer.render_not_found, status: :not_found
+        # ❌ REMOVIDO: rescue ActiveRecord::RecordNotFound e render_not_found customizado.
+        # Nosso ApiResponder captura a exceção de find! e devolve o JSON perfeitamente formatado.
+        @bin = Current.tenant.waste_bins.find(params[:id])
       end
 
       def bin_params
-        # CORRIGIDO: Substituído :dev_eui por :sensor_id e adicionadas coordenadas
         params.require(:bin).permit(
           :label, :sensor_id, :status, :battery,
           bin_address_attributes: [ :address, :number, :neighborhood, :city, :state, :zip_code, :latitude, :longitude ]

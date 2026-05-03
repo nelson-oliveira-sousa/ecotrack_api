@@ -1,4 +1,3 @@
-# app/controllers/api/v1/trucks_controller.rb
 module Api
   module V1
     class TrucksController < Api::V1::ApiController
@@ -7,12 +6,16 @@ module Api
       # GET /api/v1/trucks
       def index
         trucks = Current.user.tenant.trucks
-        render json: Fleet::Serializers::TruckSerializer.render_collection(trucks), status: :ok
+        data = Fleet::Serializers::TruckSerializer.render_collection(trucks)
+
+        render_result(Result.new(success: true, data: data))
       end
 
       # GET /api/v1/trucks/:id
       def show
-        render json: Fleet::Serializers::TruckSerializer.render(@truck), status: :ok
+        data = Fleet::Serializers::TruckSerializer.render(@truck)
+
+        render_result(Result.new(success: true, data: data))
       end
 
       # POST /api/v1/trucks
@@ -20,37 +23,43 @@ module Api
         truck = Current.user.tenant.trucks.new(truck_params)
 
         if truck.save
-          render json: Fleet::Serializers::TruckSerializer.render(truck), status: :created
+          data = Fleet::Serializers::TruckSerializer.render(truck)
+          render_result(Result.new(success: true, data: data, status: :created))
         else
-          render json: Fleet::Serializers::TruckSerializer.render_errors(truck), status: :unprocessable_entity
+          # Aqui abandonamos o TruckSerializer.render_errors em favor do padrão global
+          render_result(Result.new(success: false, error: truck.errors.full_messages, status: :unprocessable_entity))
         end
       end
 
       # PATCH/PUT /api/v1/trucks/:id
       def update
         if @truck.update(truck_params)
-          render json: Fleet::Serializers::TruckSerializer.render(@truck), status: :ok
+          data = Fleet::Serializers::TruckSerializer.render(@truck)
+          render_result(Result.new(success: true, data: data))
         else
-          render json: Fleet::Serializers::TruckSerializer.render_errors(@truck), status: :unprocessable_entity
+          render_result(Result.new(success: false, error: @truck.errors.full_messages, status: :unprocessable_entity))
         end
       end
 
       # DELETE /api/v1/trucks/:id
       def destroy
+        # REGRA DE NEGÓCIO: Idealmente isso iria para um Service (ex: Fleet::Services::DestroyTruck.call),
+        # mas mantemos aqui por enquanto usando o padrão Result.
         if @truck.in_route?
-          render json: { error: "Não é possível remover um camião que está em circulação." }, status: :unprocessable_entity
+          render_result(Result.new(success: false, error: "Não é possível remover um caminhão que está em circulação.", status: :unprocessable_entity))
         else
           @truck.destroy
-          render json: { message: "Camião removido com sucesso." }, status: :ok
+          render_result(Result.new(success: true, data: { message: "Caminhão removido com sucesso." }))
         end
       end
 
       # PATCH /api/v1/trucks/:id/location
       def update_location
         if @truck.update(location_params)
-          render json: Fleet::Serializers::TruckSerializer.render(@truck), status: :ok
+          data = Fleet::Serializers::TruckSerializer.render(@truck)
+          render_result(Result.new(success: true, data: data))
         else
-          render json: Fleet::Serializers::TruckSerializer.render_errors(@truck), status: :unprocessable_entity
+          render_result(Result.new(success: false, error: @truck.errors.full_messages, status: :unprocessable_entity))
         end
       end
 
@@ -58,8 +67,9 @@ module Api
 
       def set_truck
         @truck = Current.user.tenant.trucks.find(params[:id])
-      rescue ActiveRecord::RecordNotFound
-        render json: { error: "Camião não encontrado." }, status: :not_found
+        # ❌ REMOVIDO: rescue ActiveRecord::RecordNotFound
+        # Por que? Porque o nosso ApiResponder agora pega isso de forma global e
+        # devolve um JSON padronizado. Menos código para nós mantermos!
       end
 
       def truck_params
