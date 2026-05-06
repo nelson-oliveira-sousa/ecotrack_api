@@ -1,4 +1,3 @@
-# app/domains/identity/serializers/user_serializer.rb
 module Identity
   module Serializers
     class UserSerializer
@@ -12,7 +11,12 @@ module Identity
           role: user.role,
           status: user.status,
           tenant_id: user.tenant_id,
-          created_at: user.created_at
+          created_at: user.created_at,
+
+          # Novos campos de documento para os motoristas
+          cnh_number: user.cnh_number,
+          cnh_category: user.cnh_category,
+          cnh_expiration_date: user.cnh_expiration_date
         }
 
         # Campos opcionais para Login e Cadastro

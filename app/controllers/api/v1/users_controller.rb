@@ -67,7 +67,10 @@ module Api
 
       # Renomeado de user_update_params para user_params para bater com as chamadas acima
       def user_params
-        params.require(:user).permit(:name, :email, :role)
+        params.require(:user).permit(
+          :name, :email, :role,
+          :cnh_number, :cnh_category, :cnh_expiration_date # Novos campos liberados
+        )
       end
     end
   end

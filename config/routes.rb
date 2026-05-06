@@ -52,6 +52,7 @@ Rails.application.routes.draw do
       resources :trucks, only: %i[index show create update destroy] do
         member do
           patch :location, to: "trucks#update_location"
+          patch :toggle_status, to: "trucks#toggle_status" # [NOVO]
         end
       end
 

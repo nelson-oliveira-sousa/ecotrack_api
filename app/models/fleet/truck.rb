@@ -11,6 +11,9 @@ module Fleet
     # 3. Validações
     validates :plate, presence: true, uniqueness: { case_sensitive: false }
     validates :capacity, presence: true, numericality: { greater_than: 0 }
+    validates :renavam, presence: true, uniqueness: true
+    validates :manufacture_year, presence: true, numericality: { only_integer: true, greater_than_or_equal_to: 1900 }
+    validates :document_expiration_date, presence: true
 
     # Formato de placa padrão Mercosul ou Antigo
     # validates :plate, format: {
@@ -26,7 +29,7 @@ module Fleet
     private
 
     def status_active
-      self.status = :available if status == "inactive"
+      self.status = :available if status == :inactive
     end
 
     def upcase_plate

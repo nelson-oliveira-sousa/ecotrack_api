@@ -22,6 +22,7 @@ class User < ApplicationRecord
   validates :email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }
   validates :name, presence: true
   validates :force_password_change, inclusion: { in: [ true, false ] }
+  validates :cnh_number, :cnh_expiration_date, presence: true, if: -> { role == "driver" }
 
   # A unicidade com scope continua perfeita.
   # Vendedores (tenant_id: nil) não podem repetir email entre si.

@@ -16,6 +16,12 @@ module Fleet
             capacity: truck.capacity,
             status: truck.status,
             model: truck.model,
+
+            # Novos campos de documentação do caminhão
+            renavam: truck.renavam,
+            manufacture_year: truck.manufacture_year,
+            document_expiration_date: truck.document_expiration_date,
+
             location: {
               latitude: truck.current_lat,
               longitude: truck.current_lng
@@ -25,10 +31,10 @@ module Fleet
           }
         end
 
-         def self.render_as_hash(resource)
-              resource.respond_to?(:map) ? render_collection(resource) : render(resource)
-            end
-
+        # Removido o 'self.' pois já estamos dentro de 'class << self'
+        def render_as_hash(resource)
+          resource.respond_to?(:map) ? render_collection(resource) : render(resource)
+        end
 
         def render_errors(truck)
           { errors: truck.errors.full_messages }

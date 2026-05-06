@@ -1,7 +1,7 @@
 module Api
   module V1
     class TrucksController < Api::V1::ApiController
-      before_action :set_truck, only: [ :show, :update, :destroy, :update_location ]
+      before_action :set_truck, only: [ :show, :update, :destroy, :update_location, :toggle_status ]
 
       # GET /api/v1/trucks
       def index
@@ -63,6 +63,17 @@ module Api
         end
       end
 
+      def toggle_status
+        puts "🚀 [TrucksController#toggle_status] Caminhão ID: #{@truck.id}, Status Atual: #{@truck.status}"
+        new_status = @truck.status == :available ? :inactive : :available
+        if @truck.update(status: new_status)
+          data = Fleet::Serializers::TruckSerializer.render(@truck)
+          render_result(Result.new(success: true, data: data, status: :ok))
+        else
+          render_result(Result.new(success: false, error: @truck.errors.full_messages, status: :unprocessable_entity))
+        end
+      end
+
       private
 
       def set_truck
@@ -73,9 +84,11 @@ module Api
       end
 
       def truck_params
-        params.require(:truck).permit(:plate, :capacity, :model)
+        params.require(:truck).permit(
+          :plate, :model, :capacity,
+          :renavam, :manufacture_year, :document_expiration_date # Novos campos liberados
+        )
       end
-
       def location_params
         params.require(:location).permit(:current_lat, :current_lng)
       end

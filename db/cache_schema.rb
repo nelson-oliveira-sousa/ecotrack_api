@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_05_132113) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_06_224148) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -63,8 +63,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_05_132113) do
     t.datetime "created_at", null: false
     t.decimal "current_lat", precision: 10, scale: 6
     t.decimal "current_lng", precision: 10, scale: 6
+    t.date "document_expiration_date"
+    t.integer "manufacture_year"
     t.string "model", null: false
     t.string "plate"
+    t.string "renavam"
     t.integer "status", default: 0
     t.bigint "tenant_id", null: false
     t.datetime "updated_at", null: false
@@ -249,6 +252,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_05_132113) do
   end
 
   create_table "users", force: :cascade do |t|
+    t.string "cnh_category"
+    t.date "cnh_expiration_date"
+    t.string "cnh_number"
     t.datetime "created_at", null: false
     t.string "email"
     t.boolean "force_password_change", default: false
