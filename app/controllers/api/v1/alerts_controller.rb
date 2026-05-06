@@ -1,8 +1,18 @@
-# app/controllers/api/v1/alerts_controller.rb
 module Api
   module V1
     class AlertsController < Api::V1::ApiController
       include ActionController::Live
+
+      # GET /api/v1/alerts
+      def index
+        # Traz os alertas do tenant atual, ordenados pelos mais recentes
+        alerts = Current.tenant.alerts.order(created_at: :desc)
+
+        # Formatando a saída usando as_json (o ideal no futuro é ter um AlertSerializer)
+        data = alerts.as_json(only: [ :id, :status, :created_at, :updated_at ])
+
+        render_result(Result.new(success: true, data: data))
+      end
 
       # GET /api/v1/alerts/stream
       def stream

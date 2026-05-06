@@ -1,19 +1,23 @@
 # app/domains/tenants/services/validate.rb
 module Tenants
   module Services
-    class Validate
-      def self.call(slug)
-        return { success: false, error: "Slug não fornecido", status: :bad_request } if slug.blank?
+    class Validate < ApplicationService
+      def initialize(slug)
+        @slug = slug
+      end
+
+      def call
+        return failure("Slug não fornecido", :bad_request) if @slug.blank?
 
         # Blindagem: "Guaiçara SP" -> "guaicara-sp"
-        clean_slug = slug.to_s.parameterize
-
+        clean_slug = @slug.to_s.parameterize
         tenant = Tenant.find_by(slug: clean_slug)
 
-        return { success: false, error: "Prefeitura não encontrada", status: :not_found } unless tenant
-        return { success: false, error: "Acesso suspenso", status: :forbidden } if tenant.inactive?
+        return failure("Prefeitura não encontrada", :not_found) unless tenant
+        return failure("Acesso suspenso", :forbidden) if tenant.inactive?
 
-        { success: true, tenant: tenant, status: :ok }
+        # Agora retorna Result.new(success: true, data: tenant, status: :ok)
+        success(tenant)
       end
     end
   end

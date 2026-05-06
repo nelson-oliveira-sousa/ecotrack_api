@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_02_134517) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_05_132113) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -63,6 +63,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_02_134517) do
     t.datetime "created_at", null: false
     t.decimal "current_lat", precision: 10, scale: 6
     t.decimal "current_lng", precision: 10, scale: 6
+    t.string "model", null: false
     t.string "plate"
     t.integer "status", default: 0
     t.bigint "tenant_id", null: false
@@ -280,6 +281,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_02_134517) do
     t.text "ai_prediction"
     t.integer "battery"
     t.datetime "created_at", null: false
+    t.string "equipment_status", default: "online"
     t.string "label"
     t.datetime "last_analysis_at"
     t.integer "level"

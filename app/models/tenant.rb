@@ -5,6 +5,9 @@ class Tenant < ApplicationRecord
   has_one :profile, class_name: "TenantProfile", dependent: :destroy
   has_many :waste_bins, class_name: "Waste::Bin", dependent: :destroy
   has_many :trucks, class_name: "Fleet::Truck", dependent: :destroy
+  has_many :routes, class_name: "Fleet::Route", dependent: :destroy
+  has_many :alerts, dependent: :destroy
+
   # 1. ADICIONADO: Necessário para o Onboarding (Tenant + Admin)
   has_many :users, dependent: :destroy
 

@@ -8,9 +8,16 @@ module Api
       # GET /api/v1/users
       def index
         users = Current.tenant.users
-        data = Identity::Serializers::UserSerializer.render(users)
+        users = users.where(role: params[:role]) if params[:role].present?
 
-        # Envolvemos em um Result para garantir o formato do JSON de saída
+        data = Identity::Serializers::UserSerializer.render_collection(users)
+        render_result(Result.new(success: true, data: data))
+      end
+
+      # GET /api/v1/users/:id
+      # Adicionado para resolver o erro AbstractController::ActionNotFound
+      def show
+        data = Identity::Serializers::UserSerializer.render(@user)
         render_result(Result.new(success: true, data: data))
       end
 
@@ -18,28 +25,24 @@ module Api
       def create
         result = Identity::Services::UserRegistration.call(
           tenant: Current.tenant,
-          user_params: user_params
+          user_params: user_params # Chamada corrigida
         )
 
         if result.success?
-          # O Controller (camada de apresentação) formata a saída do Service
           serialized_data = Identity::Serializers::UserSerializer.render(
             result.data[:user],
             include_force_change: true,
             temporary_password: result.data[:temp_password]
           )
-
-          # Renderiza sucesso com os dados serializados
           render_result(Result.new(success: true, data: serialized_data, status: :created))
         else
-          # Renderiza a falha repassando o Result original do Service
           render_result(result)
         end
       end
 
       # PATCH/PUT /api/v1/users/:id
       def update
-        if @user.update(user_params)
+        if @user.update(user_params) # Chamada corrigida
           data = Identity::Serializers::UserSerializer.render(@user)
           render_result(Result.new(success: true, data: data))
         else
@@ -58,7 +61,12 @@ module Api
 
       private
 
-      def user_update_params
+      def set_user
+        @user = Current.tenant.users.find(params[:id])
+      end
+
+      # Renomeado de user_update_params para user_params para bater com as chamadas acima
+      def user_params
         params.require(:user).permit(:name, :email, :role)
       end
     end

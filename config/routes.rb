@@ -16,7 +16,7 @@ Rails.application.routes.draw do
 
       # [NOVO] Adicionado para o fluxo de Primeiro Acesso (MVP)
       patch "update_password", to: "passwords#update_password"
-      resources :users, only: [ :create ]
+      resources :users, only: [ :index, :create, :show, :update, :destroy ]
 
       resources :tenants, only: [ :create ]
       get "tenants/:slug/validate", to: "tenants#validate"
@@ -42,13 +42,14 @@ Rails.application.routes.draw do
       # ---------------------------------------------------------
       # 🗑️ LIXEIRAS & CAMINHÕES
       # ---------------------------------------------------------
-      resources :bins, only: [ :index, :show ] do
+      resources :bins, only: [ :index, :show, :create, :update, :destroy ] do
         member do
-          patch :collect
+          patch :collect, to: "bins#collect"
+          patch :toggle_status, to: "bins#toggle_status" # [NOVO]
         end
       end
 
-      resources :trucks do
+      resources :trucks, only: %i[index show create update destroy] do
         member do
           patch :location, to: "trucks#update_location"
         end

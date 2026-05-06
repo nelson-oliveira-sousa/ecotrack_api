@@ -13,15 +13,21 @@ module Fleet
     validates :capacity, presence: true, numericality: { greater_than: 0 }
 
     # Formato de placa padrão Mercosul ou Antigo
-    validates :plate, format: {
-      with: /\A[A-Z]{3}-?[0-9][A-Z0-9][0-9]{2}\z/i,
-      message: "deve seguir o padrão Mercosul ou antigo"
-    }
+    # validates :plate, format: {
+    #  with: /\A[A-Z]{3}-?[0-9][A-Z0-9][0-9]{2}\z/i,
+    #  message: "deve seguir o padrão Mercosul ou antigo"
+    # }
 
     # 4. Callbacks
     before_validation :upcase_plate
 
+    before_save :status_active, if: :will_save_change_to_status?
+
     private
+
+    def status_active
+      self.status = :available if status == "inactive"
+    end
 
     def upcase_plate
       self.plate = plate.to_s.upcase.gsub(/[^A-Z0-9]/, "") if plate.present?

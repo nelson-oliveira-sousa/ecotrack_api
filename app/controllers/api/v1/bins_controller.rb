@@ -1,12 +1,13 @@
 module Api
   module V1
     class BinsController < ApiController
-      before_action :set_bin, only: [ :show, :collect ]
+      before_action :set_bin, only: [ :show, :update, :collect, :destroy, :toggle_status ]
 
       # GET /api/v1/bins
       def index
         # Usamos a associação direta pelo tenant para garantir o isolamento
         bins = Current.tenant.waste_bins
+                              .includes(:bin_address, :last_collected_reading)
 
         data = Waste::Serializers::BinSerializer.render_collection(bins)
         render_result(Result.new(success: true, data: data))
@@ -34,6 +35,24 @@ module Api
         end
       end
 
+      def update
+        if @bin.update(bin_params)
+          data = Waste::Serializers::BinSerializer.render(@bin)
+          render_result(Result.new(success: true, data: data, status: :ok))
+        else
+          render_result(Result.new(success: false, error: @bin.errors.full_messages, status: :unprocessable_entity))
+        end
+      end
+
+      def destroy
+       if @bin.update(equipment_status: "offline")
+          data = Waste::Serializers::BinSerializer.render(@bin)
+          render_result(Result.new(success: true, data: data, status: :ok))
+       else
+          render_result(Result.new(success: false, error: @bin.errors.full_messages, status: :unprocessable_entity))
+       end
+      end
+
       # PATCH /api/v1/bins/:id/collect
       def collect
         # 🚀 O Controller apenas orquestra chamando o Service!
@@ -43,13 +62,24 @@ module Api
           collected_at: params[:collected_at]
         )
 
-        if result.success?
+        if result
           # O Service fez o trabalho, agora o Controller formata a resposta atualizada
           data = Waste::Serializers::BinSerializer.render(@bin)
           render_result(Result.new(success: true, data: data, status: :ok))
         else
           # Repassa a falha estruturada do Service
           render_result(result)
+        end
+      end
+
+      def toggle_status
+        puts "🚀 [BinsController#toggle_status] Lixeira ID: #{@bin.id}, Status Atual: #{@bin.equipment_status}"
+        new_status = @bin.equipment_status == "online" ? "offline" : "online"
+        if @bin.update(equipment_status: new_status)
+          data = Waste::Serializers::BinSerializer.render(@bin)
+          render_result(Result.new(success: true, data: data, status: :ok))
+        else
+          render_result(Result.new(success: false, error: @bin.errors.full_messages, status: :unprocessable_entity))
         end
       end
 
@@ -63,7 +93,7 @@ module Api
 
       def bin_params
         params.require(:bin).permit(
-          :label, :sensor_id, :status, :battery,
+          :label, :sensor_id, :battery,
           bin_address_attributes: [ :address, :number, :neighborhood, :city, :state, :zip_code, :latitude, :longitude ]
         )
       end

@@ -3,15 +3,11 @@ module Fleet
   module Serializers
     class TruckSerializer
       class << self
-        def render(truck)
-          { truck: render_as_hash(truck) }
-        end
-
         def render_collection(trucks)
-          { trucks: trucks.map { |truck| render_as_hash(truck) } }
+          trucks.map { |truck| render(truck) }
         end
 
-        def render_as_hash(truck)
+        def render(truck)
           return nil unless truck
 
           {
@@ -19,6 +15,7 @@ module Fleet
             plate: truck.plate,
             capacity: truck.capacity,
             status: truck.status,
+            model: truck.model,
             location: {
               latitude: truck.current_lat,
               longitude: truck.current_lng
@@ -27,6 +24,11 @@ module Fleet
             updated_at: truck.updated_at
           }
         end
+
+         def self.render_as_hash(resource)
+              resource.respond_to?(:map) ? render_collection(resource) : render(resource)
+            end
+
 
         def render_errors(truck)
           { errors: truck.errors.full_messages }

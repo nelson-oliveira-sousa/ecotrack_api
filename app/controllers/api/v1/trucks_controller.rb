@@ -73,7 +73,7 @@ module Api
       end
 
       def truck_params
-        params.require(:truck).permit(:plate, :capacity, :status)
+        params.require(:truck).permit(:plate, :capacity, :model)
       end
 
       def location_params

@@ -17,18 +17,26 @@ module Waste
 
     has_many :readings, class_name: "Waste::Reading", dependent: :destroy
 
+    has_one :last_collected_reading, -> { where(status: "collected").order(created_at: :desc) },
+            class_name: "Waste::Reading"
+
     # Permite criar/atualizar o endereço junto com a lixeira
     accepts_nested_attributes_for :bin_address, update_only: true
 
     # Callbacks
     before_save :sync_status, if: :level_changed?
 
+    enum :equipment_status, {
+      online: "online",
+      offline: "offline",
+      maintenance: "maintenance"
+    }, default: :online
+
     enum :status, {
       normal: "normal",
       warning: "warning",
       critical: "critical",
-      collected: "collected",
-      offline: "offline"
+      collected: "collected"
     }, default: :normal
 
     # Validações Sênior
@@ -52,8 +60,9 @@ module Waste
       ].compact.join(", ")
     end
 
+
     def sync_status
-      self.status = Waste::BinStatusResolver.call(level)
+      self.status = Waste::BinStatusResolver.call(level.to_i)
     end
 
     def analysis_needed?
@@ -62,7 +71,7 @@ module Waste
     end
 
     def last_collection
-      readings.where(status: "collected").order(created_at: :desc).first&.created_at
+      last_collected_reading&.created_at
     end
   end
 end
