@@ -1,61 +1,47 @@
+# app/models/user.rb
 class User < ApplicationRecord
   has_secure_password
 
-  # 1. Opcional: Permite que tenant seja nulo para os vendedores/super_admin da sua empresa
+  # Opcional para super_admins/vendedores, obrigatório para clientes (validado no Form/Service)
   belongs_to :tenant, optional: true
 
-  # 2. Novos papéis (Roles) divididos entre Sistema (Vocês) e Cliente (Prefeituras)
+  # Papéis (Roles) divididos entre Sistema e Cliente
   enum :role, {
-    # 👑 Nível Sistema (Sua Empresa - tenant_id: nil)
+    # Nível Sistema
     super_admin: "super_admin",
     vendedor:    "vendedor",
     suporte:     "suporte",
 
-    # 🏢 Nível Cliente (Prefeitura - tenant_id: obrigatório)
+    # Nível Cliente (Prefeitura)
     admin:       "admin",
     driver:      "driver",
     collector:   "collector"
   }
 
-  enum :status, { active: 1, inactive: 0, suspended: 2 }
+  # Status padronizado como String (Épico 2)
+  enum :status, {
+    active: "active",
+    inactive: "inactive",
+    suspended: "suspended"
+  }, default: :active
 
-  validates :email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }
+  # Validações estruturais absolutas
+  validates :email, presence: true,
+                    format: { with: URI::MailTo::EMAIL_REGEXP },
+                    uniqueness: { scope: :tenant_id }
   validates :name, presence: true
   validates :force_password_change, inclusion: { in: [ true, false ] }
-  validates :cnh_number, :cnh_expiration_date, presence: true, if: -> { role == "driver" }
 
-  # A unicidade com scope continua perfeita.
-  # Vendedores (tenant_id: nil) não podem repetir email entre si.
-  # Prefeituras não podem repetir email dentro do mesmo tenant.
-  validates :email, uniqueness: { scope: :tenant_id }
+  # Validação de senha delegada ao validador do domínio Identity (Épico 1)
+  # A lógica de complexidade sai do model e vai para o domínio
+  validates :password, identity_password_format: true, if: -> { new_record? || !password.nil? }
 
-  # 3. 🔥 REMOVIDO: validates :tenant, presence: true
-  # SUBSTITUÍDO POR: Validação inteligente baseada na Role
-  validate :tenant_presence_based_on_role
-
-  # Sua validação de senha está excelente, intocada.
-  validates :password, format: {
-    with: /\A(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*#?&])[A-Za-z\d@$!%*#?&]{8,}\z/,
-    message: "deve conter pelo menos 8 caracteres, uma letra, um número e um caractere especial"
-  }, if: -> { new_record? || !password.nil? }
-
-  # --- Métodos Auxiliares ---
-
+  # Métodos Auxiliares de Domínio
   def system_user?
     super_admin? || vendedor? || suporte?
   end
 
   def tenant_user?
     admin? || driver? || collector?
-  end
-
-  private
-
-  def tenant_presence_based_on_role
-    if system_user? && tenant_id.present?
-      errors.add(:tenant, "Usuários do sistema não devem pertencer a um tenant específico")
-    elsif tenant_user? && tenant_id.blank?
-      errors.add(:tenant, "Usuários da operação (Prefeitura) precisam pertencer a um tenant")
-    end
   end
 end

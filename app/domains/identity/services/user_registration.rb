@@ -7,26 +7,17 @@ module Identity
       end
 
       def call
-        user = @tenant.users.build(@user_params)
-        user.password = temp_password
-        user.force_password_change = true
-        user.status = active_status
+        form = Identity::Forms::UserRegistrationForm.new(@user_params)
+        form.tenant_id = @tenant&.id if form.tenant_id.blank?
 
-        return success({ user: user, temp_password: user.password }, :created) if user.save
+        return success({
+            user: form.user,
+            temp_password: form.user.password
+        }, :created) if form.save
 
-        failure(user.errors.full_messages, :unprocessable_entity)
+        failure(form.user.errors.full_messages, :unprocessable_entity)
       rescue StandardError => e
         failure("Erro ao registrar usuário: #{e.message}", :internal_server_error)
-      end
-
-      private
-
-      def temp_password
-        SecureRandom.hex(3)
-      end
-
-      def active_status
-        :active
       end
     end
   end

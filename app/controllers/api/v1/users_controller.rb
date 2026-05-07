@@ -25,7 +25,7 @@ module Api
       def create
         result = Identity::Services::UserRegistration.call(
           tenant: Current.tenant,
-          user_params: user_params # Chamada corrigida
+          user_params: user_params
         )
 
         if result.success?
