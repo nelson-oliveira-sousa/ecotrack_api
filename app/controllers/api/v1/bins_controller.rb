@@ -1,6 +1,7 @@
 module Api
   module V1
     class BinsController < ApiController
+      skip_before_action :authorize_request, only: :sensor, raise: false
       before_action :set_bin, only: [ :show, :update, :collect, :destroy, :toggle_status ]
 
       # GET /api/v1/bins
@@ -81,6 +82,34 @@ module Api
         else
           render_result(Result.new(success: false, error: @bin.errors.full_messages, status: :unprocessable_entity))
         end
+      end
+
+      def sensor
+        bin = Waste::Bin.find_by(id: params[:id])
+        return render_result(Result.new(success: false, error: "Lixeira não encontrada", status: :not_found)) unless bin
+
+        level = params[:level]
+        battery = params[:battery]
+
+        if level.blank?
+          return render_result(Result.new(success: false, error: "Parâmetro level é obrigatório", status: :bad_request))
+        end
+
+        ActiveRecord::Base.transaction do
+          bin.update!(level: level.to_i, battery: battery.presence || bin.battery)
+          bin.readings.create!(
+            level: bin.level,
+            battery: bin.battery,
+            status: bin.status
+          )
+        end
+
+        Waste::AiAnalysisJob.perform_later(bin.id) if bin.analysis_needed?
+
+        data = Waste::Serializers::BinSerializer.render(bin)
+        render_result(Result.new(success: true, data: data, status: :accepted))
+      rescue ActiveRecord::RecordInvalid => e
+        render_result(Result.new(success: false, error: e.record.errors.full_messages, status: :unprocessable_entity))
       end
 
       private

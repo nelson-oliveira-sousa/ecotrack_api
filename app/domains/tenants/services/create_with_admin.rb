@@ -1,39 +1,43 @@
 # app/domains/tenants/services/create_with_admin.rb
 module Tenants
   module Services
-    class CreateWithAdmin
-      def self.call(params)
+    class CreateWithAdmin < ApplicationService
+      def initialize(tenant_params:, admin_params:)
+        @tenant_params = tenant_params
+        @admin_params = admin_params
+      end
+
+      def call
         tenant = Tenant.new(
-          name: params[:name],
-          code: params[:code],
+          name: @tenant_params[:name],
           status: :active
         )
 
-        tenant.build_tenant_profile(params[:profile_attributes])
-
-        # Prepara o usuário admin daquela prefeitura
-        admin = tenant.users.build(
-          name: params.dig(:admin_attributes, :name),
-          email: params.dig(:admin_attributes, :email),
-          role: :admin,
-          status: :active,
-          force_password_change: true # Cai na trava de segurança que fizemos antes!
+        tenant.build_profile(
+          document: @tenant_params[:document],
+          contact_email: @tenant_params[:contact_email],
+          contact_phone: @tenant_params[:contact_phone]
         )
 
-        # Gera senha amigável (ex: 9f2a1b)
-        temp_password = SecureRandom.hex(3)
-        admin.password = temp_password
+        temporary_password = @admin_params[:password].presence || SecureRandom.hex(3)
+        admin = tenant.users.build(
+          name: @admin_params[:name],
+          email: @admin_params[:email],
+          role: :admin,
+          status: :active,
+          force_password_change: true,
+          password: temporary_password
+        )
 
         ActiveRecord::Base.transaction do
           tenant.save!
-          # Se passar daqui, salvou o tenant, o profile e o usuário atrelado a ele.
         end
 
-        { success: true, tenant: tenant, admin: admin, temp_password: temp_password }
+        success({ tenant: tenant, admin: admin, temporary_password: temporary_password }, :created)
       rescue ActiveRecord::RecordInvalid => e
-        { success: false, errors: e.record.errors.full_messages }
-      rescue => e
-        { success: false, errors: [ e.message ] }
+        failure(e.record.errors.full_messages, :unprocessable_entity)
+      rescue ActiveRecord::RecordNotUnique => e
+        failure(e.message, :unprocessable_entity)
       end
     end
   end

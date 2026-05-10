@@ -4,7 +4,7 @@ class Api::V1::BinsControllerTest < ActionDispatch::IntegrationTest
   setup do
     @user = users(:one)
     @tenant = @user.tenant
-    @headers = auth_headers_for(@user, "password123")
+    @headers = auth_headers_for(@user, "Password123!")
   end
 
   test "deve listar lixeiras do tenant com formato padronizado" do

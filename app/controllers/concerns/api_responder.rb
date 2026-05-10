@@ -3,13 +3,12 @@ module ApiResponder
   extend ActiveSupport::Concern
 
   included do
+    # rescue_from procura handlers em ordem reversa de declaração; o genérico
+    # precisa vir antes para não engolir os handlers específicos abaixo.
+    rescue_from StandardError, with: :internal_server_error unless Rails.env.development?
+
     rescue_from ActiveRecord::RecordNotFound, with: :record_not_found
     rescue_from ActiveRecord::RecordInvalid, with: :record_invalid
-
-    # Dica Sênior: Se resgatar StandardError no ambiente de desenvolvimento,
-    # você perde a tela vermelha do Rails que ajuda no debug.
-    # O ideal é habilitar isso só em produção/staging.
-    rescue_from StandardError, with: :internal_server_error unless Rails.env.development?
   end
 
   # Helper global para renderizar o objeto Result dos Services

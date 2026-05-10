@@ -1,17 +1,25 @@
 # Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
 
 one:
-  plate: MyString
-  capacity: 1
-  status: 1
+  plate: ABC1D23
+  model: Compactador 10m3
+  capacity: 1000
+  renavam: "12345678901"
+  manufacture_year: 2024
+  document_expiration_date: 2027-12-31
+  status: 0
   current_lat: 9.99
   current_lng: 9.99
   tenant: one
 
 two:
-  plate: MyString
-  capacity: 1
-  status: 1
+  plate: DEF4G56
+  model: Compactador 15m3
+  capacity: 1500
+  renavam: "98765432109"
+  manufacture_year: 2023
+  document_expiration_date: 2027-12-31
+  status: 0
   current_lat: 9.99
   current_lng: 9.99
   tenant: two

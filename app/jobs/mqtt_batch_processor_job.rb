@@ -5,8 +5,7 @@ class MqttBatchProcessorJob < ApplicationJob
   limits_concurrency to: 1, key: "mqtt_batch_processor", duration: 5.minutes
 
   def perform
-    # Busca mensagens pendentes (status: :new)
-    messages = MqttMessage.status_new.limit(100)
+    messages = MqttMessage.ready_for_processing.limit(100)
 
     return if messages.empty?
 
@@ -24,16 +23,14 @@ class MqttBatchProcessorJob < ApplicationJob
     msg.status_processing!
     payload = msg.payload
 
-    # 1. Extração no padrão ChirpStack
-    dev_eui   = payload.dig("deviceInfo", "devEui")
+    dev_eui = payload.dig("deviceInfo", "devEui")
+    sensor_id = payload["sensor_id"] || payload["sensorId"] || dev_eui
     telemetry = payload["object"] || {}
 
-    new_level     = telemetry["level"]
-    battery_level = telemetry["battery"] || 100
+    new_level = telemetry["level"] || payload["level"]
+    battery_level = telemetry["battery"] || payload["battery"] || 100
 
-    # 2. Busca a lixeira pelo Identificador Global (dev_eui)
-    # Aqui o tenant já vem "de brinde" pela associação
-    bin = Waste::Bin.find_by!(dev_eui: dev_eui)
+    bin = Waste::Bin.find_by!(sensor_id: sensor_id)
 
     # 🔥 ATUALIZAÇÃO SÊNIOR: Transação Atômica
     ActiveRecord::Base.transaction do
@@ -56,10 +53,10 @@ class MqttBatchProcessorJob < ApplicationJob
     msg.update!(status: :processed, processed_at: Time.current)
 
   rescue ActiveRecord::RecordNotFound
-    msg.update!(status: :failed, error_log: "DevEUI #{dev_eui} não encontrado")
-    Rails.logger.error "❌ Dispositivo #{dev_eui} não cadastrado."
+    msg.update!(status: :failed)
+    Rails.logger.error("Dispositivo #{sensor_id || dev_eui} não cadastrado.")
   rescue => e
-    msg.update!(status: :failed, error_log: e.message)
-    Rails.logger.error "❌ Erro no processamento: #{e.message}"
+    msg.update!(status: :failed)
+    Rails.logger.error("Erro no processamento MQTT #{msg.id}: #{e.message}")
   end
 end

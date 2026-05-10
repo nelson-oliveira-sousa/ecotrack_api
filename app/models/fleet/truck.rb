@@ -24,13 +24,7 @@ module Fleet
     # 4. Callbacks
     before_validation :upcase_plate
 
-    before_save :status_active, if: :will_save_change_to_status?
-
     private
-
-    def status_active
-      self.status = :available if status == :inactive
-    end
 
     def upcase_plate
       self.plate = plate.to_s.upcase.gsub(/[^A-Z0-9]/, "") if plate.present?

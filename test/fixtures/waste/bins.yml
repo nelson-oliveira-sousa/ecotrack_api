@@ -1,17 +1,17 @@
 # Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
 
 one:
-  tenant_slug: MyString
-  label: MyString
+  tenant: one
+  label: Lixeira Centro
+  sensor_id: SENSOR_FIXTURE_01
   level: 1
-  status: MyString
-  latitude: 9.99
-  longitude: 9.99
+  status: normal
+  equipment_status: online
 
 two:
-  tenant_slug: MyString
-  label: MyString
+  tenant: one
+  label: Lixeira Bairro
+  sensor_id: SENSOR_FIXTURE_02
   level: 1
-  status: MyString
-  latitude: 9.99
-  longitude: 9.99
+  status: normal
+  equipment_status: online

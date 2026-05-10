@@ -14,8 +14,9 @@ module Fleet
       def call
         broadcast_update("processing", "Iniciando varredura de lixeiras críticas...")
 
-        # 1. Busca Lixeiras (Nível >= 50% ou Status Critical/1)[cite: 1]
-        bins = @tenant.waste_bins.where("level >= ? OR status = ?", 50, 1).includes(:bin_address)
+        bins = @tenant.waste_bins
+                      .where("level >= ? OR status IN (?)", 50, %w[critical warning])
+                      .includes(:bin_address)
         trucks = @tenant.trucks.where(status: :available)
         drivers = @tenant.users.where(role: :driver) # Corrigido para símbolo (enum)[cite: 1]
 
@@ -78,12 +79,19 @@ module Fleet
 
       def optimize_multi_fleet_with_ai(bins, trucks)
         prompt = construct_vrp_prompt(bins, trucks)
-        response = Ai::GeminiClient.new.generate(prompt) # Usando seu Adapter[cite: 1]
+        response = Ai::GeminiClient.generate(prompt, purpose: :general_purpose)
         response.is_a?(Hash) ? response : fallback_allocation(bins, trucks)
       end
 
       def construct_vrp_prompt(bins, trucks)
-        bins_data = bins.map { |b| { id: b.id, lat: b.bin_address.latitude, lng: b.bin_address.longitude, level: b.level } }
+        bins_data = bins.map do |b|
+          {
+            id: b.id,
+            lat: b.bin_address&.latitude,
+            lng: b.bin_address&.longitude,
+            level: b.level
+          }
+        end
         trucks_data = trucks.map { |t| { id: t.id, lat: t.current_lat, lng: t.current_lng, capacity: t.capacity } }
 
         <<~PROMPT

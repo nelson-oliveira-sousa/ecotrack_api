@@ -18,18 +18,12 @@ module ActiveSupport
     # Facilita a leitura do JSON retornado pela API e permite acessar chaves
     # tanto como string ('success') quanto como symbol (:success).
     def json_response
-      @json_response ||= JSON.parse(response.body).with_indifferent_access
-    end
-
-    # Limpa a variável de cache do json_response a cada nova requisição
-    # para testes que fazem múltiplos gets/posts no mesmo bloco
-    setup do
-      @json_response = nil
+      ::JSON.parse(response.body).with_indifferent_access
     end
 
     # Helper para autenticar rapidamente qualquer usuário das fixtures
     # Uso no teste: get api_v1_bins_url, headers: auth_headers_for(users(:nelson))
-    def auth_headers_for(user, password = "password123")
+    def auth_headers_for(user, password = "Password123!")
       # O nosso código usa o padrão Result agora!
       result = Identity::Services::Authenticator.call(
         tenant_code: user.tenant.code,
@@ -38,7 +32,8 @@ module ActiveSupport
       )
 
       if result.success?
-        { "Authorization" => "Bearer #{result.data[:token]}" }
+        token = result.data[:access_token] || result.data[:token]
+        { "Authorization" => "Bearer #{token}" }
       else
         raise "Falha ao autenticar na fixture de testes: #{result.error}"
       end

@@ -1,87 +1,368 @@
-# Análise Completa do Projeto `ecotrack_api`
+# Analise completa do projeto `ecotrack_api`
 
-## 1) Resumo executivo
-O `ecotrack_api` é uma API Rails (8.x) para gestão de resíduos com multi-tenant, IoT (MQTT), frota, roteirização assistida por IA e alertas operacionais. A base está bem estruturada por domínio, porém ainda há espaço para padronização transversal (especialmente **status**) e robustez operacional.
+Data da analise: 2026-05-10
 
-## 2) Stack técnica
-- Rails `~> 8.1.3`
-- PostgreSQL (`pg`)
-- Jobs/cache/cable: `solid_queue`, `solid_cache`, `solid_cable`
-- Segurança: `bcrypt`, `jwt`, `rack-attack`, `rack-cors`
-- Integrações: `mqtt`, `faraday`
-- Contratos: `dry-validation`
+## 1. Resumo executivo
 
-## 3) Arquitetura e domínios
-- **API**: `app/controllers/api/v1/*`.
-- **Domínios**: `identity`, `telemetry`, `waste`, `fleet`, `alerts`, `dashboard` em `app/domains/*`.
-- **Modelos centrais**: `Tenant`, `User`, `Waste::Bin`, `Waste::Reading`, `Fleet::Truck`, `Fleet::Route`, `Alert`, `MqttMessage`.
-- **Assíncrono**: jobs em `app/jobs/*` para processamento IoT/IA/rotas.
+O `ecotrack_api` e uma API Rails 8 para uma plataforma EcoTrack de gestao inteligente de residuos. O projeto cobre multi-tenancy, autenticacao JWT, usuarios por papel, lixeiras IoT, ingestao MQTT, historico de leituras, alertas, dashboard operacional, frota, rotas e otimizacao com IA.
 
-## 4) Fluxos críticos de negócio
-1. Login/logout/me com JWT e contexto de tenant.
-2. Ingestão de telemetria por sensor/MQTT.
-3. Análise de bins por IA para predição de lotação.
-4. Geração de rotas para caminhões com fallback.
-5. Emissão de alertas/atualizações em tempo real.
+A base tem boas escolhas arquiteturais: separacao por dominios em `app/domains`, uso de services, serializers, `Result`, `CurrentAttributes`, Solid Queue e PostgreSQL. O desenho geral esta acima de um CRUD simples e ja aponta para uma arquitetura modular.
 
-## 5) Achados técnicos relevantes
-1. Em `Telemetry::Services::ProcessMessage`, há risco de erro por chamada de utilitário em módulo (`mount_reading_data`) sem padronização explícita de método de classe.
-2. No mesmo fluxo, existe chave `batery`, potencial inconsistente com o domínio (`battery`).
-3. Forte dependência de IA na roteirização, mesmo com fallback.
-4. README atual não cobre onboarding completo.
+O principal ponto de atencao e que existem inconsistencias entre codigo, schema e rotas que podem quebrar fluxos criticos em runtime, especialmente ingestao IoT/MQTT, criacao de tenants, rota publica de sensor e testes. A recomendacao e estabilizar esses contratos antes de evoluir features.
 
-## 6) Padronização de status (solicitado)
-Hoje o projeto usa status em formatos mistos (integer enum e string enum), além de vocabulários diferentes por contexto. Isso dificulta filtros, integrações e consistência de API.
+## 2. Stack e infraestrutura
 
-### 6.1 Estado atual (diagnóstico)
-- `User.status`: **string enum** (`active`, `inactive`, `suspended`).
-- `Waste::Bin.status`: **string enum** (`normal`, `warning`, `critical`, `collected`).
-- `Waste::Bin.equipment_status`: **string enum** (`online`, `offline`, `maintenance`).
-- `Fleet::Truck.status`: **integer enum** (`available`, `in_route`, `maintenance`, `inactive`).
-- `Fleet::Route.status`: **integer enum** (`planned`, `active`, `completed`, `cancelled`).
-- `Alert.status`: **integer enum** (`pending`, `resolved`).
-- `Tenant.status`: **integer enum** (`inactive`, `active`).
-- `MqttMessage.status`: enum específico de pipeline.
+- Linguagem/runtime: Ruby 3.4.1.
+- Framework: Rails `~> 8.1.3`, API-only.
+- Banco: PostgreSQL.
+- Jobs/cache/cable: `solid_queue`, `solid_cache`, `solid_cable`.
+- Auth/seguranca: `bcrypt`, `jwt`, `rack-attack`, `rack-cors`.
+- IoT: `mqtt`.
+- IA/HTTP: `faraday`, adapter Gemini.
+- Validacao: `dry-validation`.
+- Testes: Minitest.
+- Deploy/container: Dockerfile de producao, Kamal presente, `docker-compose.yml` para Postgres e PGWeb em desenvolvimento.
 
-### 6.2 Padrão recomendado
-Adotar padrão único de contrato para exposição de status na API:
-- **Padrão externo (API)**: sempre string (`snake_case`, inglês).
-- **Padrão interno (DB)**: pode permanecer integer enum por eficiência, desde que serialização normalize para string.
-- **Vocabulário base (cross-domain)**:
-  - `active`, `inactive`, `maintenance`, `pending`, `processing`, `completed`, `failed`, `cancelled`, `resolved`, `critical`.
+## 3. Organizacao do codigo
 
-### 6.3 Plano de implementação
-1. Criar um **Status Dictionary** central (`config/statuses.yml` ou módulo em `app/lib/status_catalog.rb`).
-2. Padronizar serialização de todos os recursos para retornar string canônica.
-3. Mapear aliases legados (`in_route` vs `active_route`, etc.) apenas no domínio interno.
-4. Adicionar validação de contrato nos testes de API para garantir status padronizado.
-5. Migrar gradualmente enums integer→string apenas onde fizer sentido, evitando big-bang.
+### Pontos fortes
 
-### 6.4 Ganhos
-- Menor ambiguidade entre times (produto, backend, frontend, dados).
-- APIs mais previsíveis.
-- Menos retrabalho em filtros e dashboards.
+- Controllers REST em `app/controllers/api/v1`.
+- Dominios separados em `app/domains`: `identity`, `telemetry`, `waste`, `fleet`, `alerts`, `dashboard`, `tenants`.
+- Models namespaced para subdominios: `Waste::*`, `Fleet::*`, `Telemetry::*`.
+- Serializers simples e previsiveis por dominio.
+- Services com `ApplicationService` e objeto `Result`.
+- `StatusCatalog` ja existe para normalizar status expostos pela API.
 
-## 7) Segurança, observabilidade e confiabilidade
-- Reforçar auditoria de endpoint público de sensor.
-- Implantar logs estruturados + métricas + tracing para jobs e pipeline MQTT.
-- Implementar política de idempotência/retry/DLQ no consumo de telemetria.
+### Pontos de melhoria
 
-## 8) Recomendações priorizadas
-### Curto prazo (1–2 sprints)
-1. Corrigir inconsistências do `ProcessMessage`.
-2. Padronizar contrato de status na API (serialização + testes).
-3. Completar README com setup, workers, variáveis e troubleshooting.
+- Nem todos os services seguem o mesmo contrato. Alguns retornam `Result`, outros retornam `Hash`.
+- Ha comentarios de fase MVP e notas temporarias ainda em codigo de producao.
+- Algumas rotas declaradas nao possuem action implementada.
+- Ha codigo legado referenciando colunas removidas/renomeadas em migracoes.
+- O README ainda e o template padrao do Rails, sem onboarding real.
 
-### Médio prazo (3–5 sprints)
-1. Catálogo central de status por domínio.
-2. OpenAPI dos endpoints críticos.
-3. Observabilidade completa para jobs e stream.
+## 4. Modelo de dominio
 
-### Longo prazo
-1. Otimização híbrida de rotas (IA + heurística determinística).
-2. SLOs formais por domínio.
-3. Governança multi-tenant com auditoria operacional.
+### Multi-tenancy
 
-## 9) Conclusão
-O projeto tem base sólida de domínio e arquitetura. O próximo salto de maturidade é **padronização de status + confiabilidade operacional + documentação executável** para escalar com segurança.
+Entidades principais pertencem a `Tenant`: usuarios, lixeiras, caminhoes, rotas, alertas e mensagens MQTT. O isolamento em controllers normalmente usa `Current.tenant`, por exemplo em bins, users e trucks.
+
+Riscos:
+
+- `ApiController#current_tenant` retorna `@current_tenant`, mas `authorize_request` define `Current.tenant`, nao `@current_tenant`.
+- Usuarios de sistema (`super_admin`, `vendedor`, `suporte`) tem `tenant` opcional no model, mas `authorize_request` exige `Current.tenant`; isso dificulta rotas globais autenticadas.
+- Criacao de tenants esta inconsistentes entre controller e service.
+
+### Identidade
+
+O projeto usa JWT com `jti` e tabela `revoked_tokens`, uma boa base para logout/revogacao. Roles estao modeladas como enum string no `User`, o que facilita leitura.
+
+Riscos:
+
+- `UsersController#create` renderiza erro quando `result.success?` e falso, mas nao retorna em seguida. Isso pode causar double render e/ou acessar `result.data` nulo.
+- `require_manager!` chama `current_user&.manager?`, mas `manager` nao existe no enum de roles.
+- A autorizacao ainda e manual e espalhada; para crescer, vale centralizar politicas por papel.
+
+### Waste/IoT
+
+`Waste::Bin` tem endereco, status operacional, nivel, bateria, historico de leituras e campos de IA. O uso de `sensor_id` e coerente com o schema final.
+
+Riscos:
+
+- Ha codigo antigo ainda usando `dev_eui` e `tenant_slug`, ambos removidos/renomeados.
+- O endpoint `/api/v1/bins/:id/sensor` esta roteado como publico, mas nao existe action `sensor` no controller e nao ha `skip_before_action` para JWT.
+- `destroy` de lixeira e soft-disable via `equipment_status: offline`, mas o nome HTTP `DELETE` pode confundir clientes, auditoria e produto.
+
+### Fleet/rotas
+
+Ha models para caminhoes, rotas e pontos de rota, com geracao assíncrona via job e tentativa de otimizacao com Gemini.
+
+Riscos:
+
+- `Fleet::Truck` tem callback que transforma `inactive` em `available` antes de salvar. Isso impede persistir caminhão inativo e quebra `toggle_status`.
+- `RouteGenerator` compara `waste_bins.status` com inteiro `1`, mas essa coluna e string.
+- `RouteGenerator` assume que toda lixeira tem `bin_address`; se faltar endereco, `b.bin_address.latitude` quebra.
+- O cliente Gemini e instanciado sem argumento (`Ai::GeminiClient.new.generate`), mas o initializer exige `purpose`.
+
+## 5. Fluxos criticos
+
+### Autenticacao
+
+Fluxo esperado:
+
+1. `POST /api/v1/login`.
+2. `Identity::Services::Authenticator` valida tenant, usuario e senha.
+3. `TokenManager` gera JWT com `user_id`, `tenant_id`, `exp` e `jti`.
+4. Requests autenticados validam token e tenant.
+
+Maturidade: boa para MVP.
+
+Prioridades:
+
+- Padronizar resposta de erro em `authorize_request` usando `render_result`.
+- Decidir como usuarios de sistema autenticam sem tenant.
+- Garantir `return` apos renders de bloqueio (`check_user_status!`, `enforce_password_change!`, autorizadores).
+
+### Criacao de tenant
+
+Fluxo declarado: `POST /api/v1/tenants`.
+
+Problema: o controller chama `Tenants::Services::CreateWithAdmin.call(tenant_params:, admin_params:)`, mas o service define `def self.call(params)` e retorna `Hash`, nao `Result`. Em seguida, o controller chama `result.success?`, que nao existe em `Hash`.
+
+Impacto: criacao de tenant tende a falhar em runtime.
+
+### Ingestao IoT/MQTT
+
+Existem pelo menos tres caminhos de ingestao:
+
+- `Telemetry::MqttProcessor`, que persiste `MqttMessage`.
+- `MqttBatchProcessorJob`, que processa `MqttMessage`.
+- `Telemetry::Services::IngestReading` / `ProcessMessage`, com contratos diferentes.
+
+Problemas criticos:
+
+- `MqttBatchProcessorJob` busca `Waste::Bin.find_by!(dev_eui: dev_eui)`, mas o schema tem `sensor_id`.
+- O mesmo job atualiza `error_log`, coluna inexistente em `mqtt_messages`.
+- `Telemetry::Services::IngestReading` busca `tenant_slug` em `Waste::Bin`, coluna removida.
+- `Telemetry::Services::ProcessMessage` chama `Waste::Services::UpdateBinStatusService`, que nao existe.
+- `ProcessMessage` faz `JSON.parse(message.payload)`, mas `payload` ja e `jsonb` e pode chegar como Hash.
+
+Impacto: este e o fluxo mais fragil do sistema hoje.
+
+### Dashboard
+
+`Dashboard::Services::SummaryService` esta simples e bem posicionado. Conta bins por status e usa query object para proxima prioridade.
+
+Ponto de atencao: se a API externa padronizar status pelo `StatusCatalog`, mas o banco usa status do dominio (`critical`, `warning`, etc.), filtros e dashboards precisam deixar claro se trabalham com status interno ou status canonico exposto.
+
+### Rotas e SSE
+
+O projeto usa `LISTEN/NOTIFY` do PostgreSQL com SSE. A ideia e boa para MVP e evita infra extra.
+
+Riscos:
+
+- `RoutesController#stream` escuta canal de alertas (`alerts_tenant_...`) para progresso de rotas. O nome funciona tecnicamente, mas mistura conceitos.
+- `broadcast_update` monta SQL com `sanitize_sql_array([ "NOTIFY %s, '%s'", ...])`; isso e fragil para payload JSON com aspas/caracteres especiais.
+- Falhas da IA caem em fallback, o que e bom, mas algumas falhas acontecem antes do fallback por null address ou initializer errado.
+
+## 6. Achados de maior severidade
+
+### Alta severidade
+
+1. Pipeline MQTT quebrado por colunas inexistentes.
+   - Arquivo: `app/jobs/mqtt_batch_processor_job.rb`
+   - Linhas: `36`, `59`, `62`
+   - Problema: usa `dev_eui` e `error_log`, ausentes no schema atual.
+   - Impacto: mensagens MQTT falham e nao atualizam lixeiras.
+
+2. Criacao de tenants incompatível com o contrato do service.
+   - Arquivos: `app/controllers/api/v1/tenants_controller.rb`, `app/domains/tenants/services/create_with_admin.rb`
+   - Problema: controller chama keywords e espera `Result`; service recebe um hash posicional e retorna `Hash`.
+   - Impacto: endpoint de onboarding pode quebrar imediatamente.
+
+3. Rota publica de sensor nao implementada.
+   - Arquivos: `config/routes.rb`, `app/controllers/api/v1/bins_controller.rb`
+   - Problema: rota aponta para `bins#sensor`, mas a action nao existe.
+   - Impacto: hardware nao consegue publicar por HTTP nesse endpoint.
+
+4. Testes nao executam.
+   - Arquivo: `config/database.yml`
+   - Problema: nao existe ambiente `test`.
+   - Evidencia: `bin/rails test` aborta com `The test database is not configured for the test environment`.
+   - Impacto: CI nao valida regressao.
+
+5. Ingestao alternativa usa colunas/classes inexistentes.
+   - Arquivos: `app/domains/telemetry/services/ingest_reading.rb`, `app/domains/telemetry/services/process_message.rb`
+   - Problema: `tenant_slug`, `UpdateBinStatusService`, `error_log`.
+   - Impacto: duplicidade de pipelines e comportamento indefinido.
+
+### Media severidade
+
+1. `Fleet::Truck` nao consegue ficar inativo.
+   - Arquivo: `app/models/fleet/truck.rb`
+   - Linhas: `27-32`
+   - Problema: callback converte `inactive` em `available`.
+   - Impacto: `toggle_status` de trucks nao funciona como esperado.
+
+2. `UsersController#create` pode fazer double render.
+   - Arquivo: `app/controllers/api/v1/users_controller.rb`
+   - Linha: `25`
+   - Problema: renderiza falha sem `return`.
+   - Impacto: erro de controller em validacoes de usuario.
+
+3. `RouteGenerator` tem query de status incorreta.
+   - Arquivo: `app/domains/fleet/services/route_generator.rb`
+   - Linha: `18`
+   - Problema: compara string column com inteiro.
+   - Impacto: lixeiras criticas podem nao entrar na geracao de rotas.
+
+4. `GeminiClient` instanciado sem argumento.
+   - Arquivo: `app/domains/fleet/services/route_generator.rb`
+   - Linha: `81`
+   - Problema: `Ai::GeminiClient#initialize` exige `purpose`.
+   - Impacto: geracao com IA quebra antes de obter resposta.
+
+5. CORS aberto para qualquer origem.
+   - Arquivo: `config/initializers/cors.rb`
+   - Problema: `origins "*"` em configuracao global.
+   - Impacto: aceitavel em MVP local, arriscado em producao.
+
+### Baixa severidade / manutencao
+
+1. README ainda e template.
+2. Comentarios temporarios e emojis em codigo de dominio dificultam manutencao profissional.
+3. Arquivos vazios acidentais na raiz: `Booting`, `Rails`, `Run`.
+4. `StatusCatalog` existe, mas ainda nao ha testes dedicados para contrato de status da API.
+5. Rotas incluem `resources :shifts`, mas nao ha controller visivel.
+
+## 7. Testes e qualidade
+
+### Estado atual
+
+Ha testes de models, controllers e integracao, mas a suite nao inicia por falta de configuracao `test` no banco.
+
+Comando executado:
+
+```bash
+bin/rails test
+```
+
+Resultado:
+
+```text
+The `test` database is not configured for the `test` environment.
+Available database configurations are:
+default
+development: primary, queue, cable, cache
+```
+
+### Recomendacoes
+
+1. Adicionar `test:` em `config/database.yml` com `primary`, `queue`, `cable` e `cache`.
+2. Corrigir fixtures que ainda possuem campos antigos (`tenant_slug`).
+3. Adicionar testes para:
+   - login/logout/me;
+   - isolamento por tenant;
+   - ingestao MQTT com payload ChirpStack;
+   - endpoint publico de sensor, se ele for mantido;
+   - geracao de rotas com fallback sem Gemini;
+   - status serializados com `StatusCatalog`.
+
+## 8. Seguranca
+
+Pontos positivos:
+
+- JWT com expiracao.
+- Revogacao por `jti`.
+- `rack-attack` para login e troca de senha.
+- API bloqueia por padrao via `ApiController`.a
+- Escopo por tenant nos principais controllers.
+
+Riscos:
+
+- CORS aberto globalmente.
+- Endpoint de sensor declarado como publico precisa autenticacao propria de dispositivo: token por sensor, assinatura HMAC, API key rotacionavel ou allowlist controlada.
+- Falta auditoria de eventos sensiveis: login, logout, troca de senha, criacao de tenant, mudanca de status, coleta.
+- `render_unauthorized` nao segue o envelope `{ success, data, error }` usado pelo `ApiResponder`.
+- Renders de autorizacao sem `return` podem permitir continuacao de callbacks/actions em alguns cenarios.
+
+## 9. Observabilidade e operacao
+
+O projeto ja usa jobs e logs, mas ainda falta robustez operacional.
+
+Recomendacoes:
+
+- Logs estruturados para MQTT: `event_id`, `tenant_id`, `sensor_id`, status, retry_count.
+- DLQ ou status de falha com motivo persistido. Hoje nao existe coluna `error_log`.
+- Politica explicita de retry/backoff usando `next_attempt_at` e `retry_count`, que ja existem no schema.
+- Metrica de mensagens processadas/falhas por minuto.
+- Health checks para DB, Solid Queue e conectividade MQTT.
+- Separar canais SSE por finalidade: `routes_tenant_ID`, `alerts_tenant_ID`.
+
+## 10. Status e contratos de API
+
+O `StatusCatalog` e uma boa decisao para normalizar a API, mas o projeto mistura:
+
+- enums inteiros (`Tenant`, `Fleet::Truck`, `Fleet::Route`, `Alert`);
+- enums string (`Waste::Bin`, `Waste::Bin#equipment_status`, `MqttMessage`);
+- status canonicos expostos (`active`, `pending`, `completed`, etc.).
+
+Recomendacao:
+
+- Manter status internos por dominio quando fizer sentido.
+- Expor sempre strings canonicas na API.
+- Documentar por recurso:
+  - status interno;
+  - status externo;
+  - transicoes permitidas;
+  - quem pode mudar.
+- Criar testes de contrato para serializers.
+
+## 11. Documentacao
+
+O README precisa virar documentacao executavel de desenvolvimento.
+
+Conteudo recomendado:
+
+1. Requisitos: Ruby, PostgreSQL, Docker opcional.
+2. Variaveis `.env`: `POSTGRES_HOST`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `GEMINI_API_KEY`, MQTT.
+3. Setup local:
+   - `bundle install`
+   - `docker compose up -d db`
+   - `bin/rails db:prepare`
+   - `bin/dev`
+4. Como rodar jobs e worker MQTT.
+5. Como rodar testes.
+6. Exemplos de payload para login, sensor e MQTT.
+7. Troubleshooting: banco, credentials, Solid Queue, MQTT.
+
+## 12. Plano priorizado
+
+### Prioridade 0: fazer a base validar
+
+1. Adicionar config `test` em `database.yml`.
+2. Rodar `bin/rails test` e corrigir fixtures quebradas.
+3. Rodar `bin/rails routes` e remover/implementar rotas sem controller/action.
+4. Remover arquivos acidentais da raiz se nao forem intencionais.
+
+### Prioridade 1: estabilizar IoT
+
+1. Escolher um unico pipeline de ingestao.
+2. Padronizar identificador como `sensor_id`.
+3. Corrigir `MqttBatchProcessorJob`.
+4. Decidir se `mqtt_messages` tera `error_log`/`last_error`.
+5. Usar `ready_for_processing` com retry/backoff.
+6. Cobrir com teste de integracao.
+
+### Prioridade 2: corrigir onboarding e identidade
+
+1. Refatorar `Tenants::Services::CreateWithAdmin` para `ApplicationService`.
+2. Ajustar controller para receber `Result`.
+3. Corrigir associacao de profile.
+4. Definir fluxo de usuarios de sistema sem tenant.
+5. Adicionar retornos apos renders de bloqueio.
+
+### Prioridade 3: rotas/frota
+
+1. Remover callback que impede truck inativo.
+2. Corrigir query de bins criticos.
+3. Tratar bins sem coordenadas.
+4. Corrigir chamada ao Gemini.
+5. Garantir fallback deterministico testado.
+
+### Prioridade 4: hardening
+
+1. Restringir CORS por ambiente.
+2. Criar autenticacao propria para hardware.
+3. Adicionar auditoria.
+4. Padronizar erros da API.
+5. Documentar OpenAPI/Swagger dos endpoints principais.
+
+## 13. Conclusao
+
+O projeto tem uma fundacao promissora: boa separacao de dominios, escolha moderna de stack Rails, preocupacao real com multi-tenancy, jobs e IoT. A arquitetura esta no caminho certo.
+
+O risco atual nao e a falta de arquitetura; e a divergencia entre iteracoes do codigo. Algumas migracoes evoluiram (`dev_eui` para `sensor_id`, remocao de `tenant_slug`), mas services e fixtures ficaram para tras. Corrigir esses contratos vai destravar testes, ingestao de telemetria, onboarding de tenants e evolucao segura das features.
+
+Minha leitura: antes de adicionar novas funcionalidades, vale fazer uma sprint curta de estabilizacao. O retorno deve ser alto, porque os problemas estao bem localizados e afetam justamente os fluxos centrais.

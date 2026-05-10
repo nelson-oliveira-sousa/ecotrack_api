@@ -33,7 +33,8 @@ module Api
           data = {
             message: "Prefeitura cadastrada com sucesso!",
             tenant: result.data[:tenant].as_json(only: [ :id, :name, :slug, :code, :status ]),
-            admin: result.data[:admin].as_json(only: [ :id, :name, :email, :role ])
+            admin: result.data[:admin].as_json(only: [ :id, :name, :email, :role ]),
+            temporary_password: result.data[:temporary_password]
           }
 
           render_result(Result.new(success: true, data: data, status: :created))

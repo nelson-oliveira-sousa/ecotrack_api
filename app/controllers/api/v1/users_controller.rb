@@ -22,7 +22,7 @@ module Api
           user_params: user_params
         )
 
-        render_result(result) unless result.success?
+        return render_result(result) unless result.success?
 
         data = Identity::Serializers::UserSerializer.render(
           result.data[:user],

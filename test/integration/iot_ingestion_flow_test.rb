@@ -7,7 +7,7 @@ class IotIngestionFlowTest < ActionDispatch::IntegrationTest
     @user = users(:one)
 
     # Garantimos que o usuário pertence ao tenant e tem uma senha conhecida
-    @user.update!(tenant: @tenant, password: "password123")
+    @user.update!(tenant: @tenant, password: "Password123!")
   end
 
   test "E2E: Login, Cadastro de Lixeira, Ingestão MQTT e Processamento Assíncrono" do
@@ -17,13 +17,13 @@ class IotIngestionFlowTest < ActionDispatch::IntegrationTest
     post api_v1_login_url, params: {
       tenant_code: @tenant.code,
       email: @user.email,
-      password: "password123"
+      password: "Password123!"
     }, as: :json
 
     assert_response :ok
     assert json_response[:success], "Falha no login E2E"
 
-    token = json_response.dig(:data, :token)
+    token = json_response.dig(:data, :access_token)
     auth_headers = { "Authorization" => "Bearer #{token}" }
 
     # ==========================================
@@ -35,6 +35,12 @@ class IotIngestionFlowTest < ActionDispatch::IntegrationTest
         sensor_id: "ESP32_PAULISTA_01",
         status: "active",
         bin_address_attributes: {
+          address: "Avenida Paulista",
+          number: "1000",
+          neighborhood: "Bela Vista",
+          city: "São Paulo",
+          state: "SP",
+          zip_code: "01310-100",
           latitude: -23.561684,
           longitude: -46.655981
         }
@@ -55,27 +61,24 @@ class IotIngestionFlowTest < ActionDispatch::IntegrationTest
     # FASE 3: Simular Ingestão MQTT (Inbox Pattern)
     # ==========================================
     payload = {
-      deviceInfo: { devEui: "ESP32_PAULISTA_01" },
-      object: { distance: 88, battery: 95 }
-    }.to_json
+      "deviceInfo" => { "devEui" => "ESP32_PAULISTA_01" },
+      "object" => { "level" => 88, "battery" => 95 }
+    }
 
-    # O Worker do Mosquitto/Chirpstack chamaria isto:
-    ingest_result = Telemetry::Services::IngestReading.call(
+    mqtt_message = MqttMessage.create!(
+      tenant: @tenant,
+      event_id: SecureRandom.uuid,
       topic: "application/1/device/ESP32_PAULISTA_01/rx",
-      payload: payload
+      payload: payload,
+      status: :new
     )
 
-    assert ingest_result.success?, "Falha na ingestão rápida"
-    mqtt_message = ingest_result.data
-    assert_equal "pending", mqtt_message.status
+    assert_equal "new", mqtt_message.status
 
     # ==========================================
     # FASE 4: Processar a Mensagem (Simulando o Background Job)
     # ==========================================
-    # O MqttBatchProcessorJob chamaria isto:
-    process_result = Telemetry::Services::ProcessMessage.call(mqtt_message)
-
-    assert process_result.success?, "Falha ao processar regra de negócio da telemetria"
+    MqttBatchProcessorJob.perform_now
 
     # Garante que a mensagem saiu da fila
     mqtt_message.reload
