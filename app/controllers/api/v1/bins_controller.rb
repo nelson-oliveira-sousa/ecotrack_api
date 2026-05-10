@@ -1,6 +1,7 @@
 module Api
   module V1
     class BinsController < ApiController
+      skip_before_action :authorize_request, only: [ :sensor ]
       skip_before_action :authorize_request, only: :sensor, raise: false
       before_action :set_bin, only: [ :show, :update, :collect, :destroy, :toggle_status ]
 
@@ -95,6 +96,21 @@ module Api
           :label, :sensor_id, :battery,
           bin_address_attributes: [ :address, :number, :neighborhood, :city, :state, :zip_code, :latitude, :longitude ]
         )
+      end
+
+      def authenticate_sensor
+        provided_key = request.headers["X-Sensor-Key"]
+
+        if provided_key.blank?
+          render json: { error: "Missing X-Sensor-Key header" }, status: :unauthorized
+          nil
+        end
+
+        @bin = Waste::Bin.find_by(id: params[:id], sensor_key: provided_key)
+
+        unless @bin
+          render json: { error: "Invalid sensor key or bin not found" }, status: :unauthorized
+        end
       end
     end
   end

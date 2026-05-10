@@ -29,7 +29,8 @@ module Api
         response.headers["X-Accel-Buffering"] = "no"
 
         tenant = Current.user.tenant
-        channel = "alerts_tenant_#{tenant.id}"
+        # 🟢 ATUALIZADO: Escutando o canal dedicado de rotas em vez de alertas globais
+        channel = "routes_tenant_#{tenant.id}"
 
         ActiveRecord::Base.connection_pool.with_connection do |connection|
           connection.execute("LISTEN #{channel}")

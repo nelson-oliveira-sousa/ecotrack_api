@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_06_224148) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_10_225431) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -77,6 +77,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_06_224148) do
   create_table "mqtt_messages", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "event_id", null: false
+    t.text "last_error"
     t.datetime "next_attempt_at"
     t.jsonb "payload", default: {}, null: false
     t.datetime "processed_at"
@@ -293,10 +294,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_06_224148) do
     t.integer "level"
     t.datetime "predicted_full_at"
     t.string "sensor_id"
+    t.string "sensor_key"
     t.string "status"
     t.bigint "tenant_id", null: false
     t.datetime "updated_at", null: false
     t.index ["sensor_id"], name: "index_waste_bins_on_sensor_id", unique: true
+    t.index ["sensor_key"], name: "index_waste_bins_on_sensor_key", unique: true
     t.index ["tenant_id"], name: "index_waste_bins_on_tenant_id"
   end
 

@@ -1,10 +1,11 @@
-# app/domains/fleet/services/route_generator.rb
 module Fleet
   module Services
     class RouteGenerator < ApplicationService
       def initialize(tenant:)
         @tenant = tenant
-        @channel = "alerts_tenant_#{@tenant.id}"
+
+        # 🟢 ATUALIZADO: Publicando no canal dedicado de rotas
+        @channel = "routes_tenant_#{@tenant.id}"
       end
 
       def call
@@ -109,6 +110,7 @@ module Fleet
         allocation
       end
 
+      # 🟢 ATUALIZADO: Método único de broadcast que suporta JSON complexo sem quebrar o SQL
       def broadcast_update(event_type, message, data = nil)
         payload = {
           event: event_type,
@@ -116,9 +118,9 @@ module Fleet
           data: data
         }.compact.to_json
 
-        ActiveRecord::Base.connection.execute(
-          ActiveRecord::Base.sanitize_sql_array([ "NOTIFY %s, '%s'", @channel, payload ])
-        )
+        # O uso de connection.quote "blinda" as aspas presentes dentro do JSON e evita falhas de Parse no PG
+        sql = "NOTIFY #{@channel}, #{ActiveRecord::Base.connection.quote(payload)}"
+        ActiveRecord::Base.connection.execute(sql)
       end
     end
   end

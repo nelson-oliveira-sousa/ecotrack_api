@@ -48,6 +48,8 @@ module Waste
     # Unicidade da lixeira por label dentro da mesma prefeitura
     validates :label, uniqueness: { scope: :tenant_id }
 
+    has_secure_token :sensor_key
+
     # Delegação para facilitar o acesso ao endereço formatado
     def full_address
       return "Endereço não cadastrado" unless bin_address

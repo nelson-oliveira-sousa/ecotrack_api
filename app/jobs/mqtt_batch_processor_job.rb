@@ -22,8 +22,17 @@ class MqttBatchProcessorJob < ApplicationJob
   def process_message(msg)
     result = Telemetry::Services::ProcessMessage.call(message: msg)
 
-    if result.failure?
-      Rails.logger.error("Erro no processamento MQTT #{msg.id}: #{result.error}")
+    if result.success?
+      message.update!(status: "processed", last_error: nil)
+    else
+      message.update!(status: "failed", last_error: result.error)
     end
+
+  rescue StandardError => e
+    Rails.logger.error("Exceção no processamento MQTT #{msg.id}: #{e.class} - #{e.message}")
+    message.update!(
+      status: "failed",
+      last_error: "#{e.class}: #{e.message}\n#{e.backtrace.first(3).join("\n")}"
+    )
   end
 end
