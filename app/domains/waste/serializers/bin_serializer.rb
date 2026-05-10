@@ -10,14 +10,14 @@ module Waste
           label: bin.label, # Mantido 'label' para bater com o Vue.js
           level: bin.level || 0,
           battery: bin.battery,
-          status: bin.status,
+          status: StatusCatalog.normalize(bin.status),
           sensor_id: bin.sensor_id, # Alinhado com o banco
 
           # 🔥 OS CAMPOS DA IA
           ai_insight: bin.ai_prediction,
           predicted_full_at: bin.predicted_full_at&.strftime("%H:%M"),
           last_analysis_at: bin.last_analysis_at,
-          equipment_status: bin.equipment_status,
+          equipment_status: StatusCatalog.normalize(bin.equipment_status),
 
           # 📍 ENDEREÇO E LOCALIZAÇÃO
           # O método full_address na Model já foi otimizado
@@ -43,12 +43,11 @@ module Waste
       end
 
       def self.render_as_hash(resource)
-              resource.respond_to?(:map) ? render_collection(resource) : render(resource)
-            end
+        resource.respond_to?(:map) ? render_collection(resource) : render(resource)
+      end
 
 
       def self.render_collection(bins)
-        puts "Serializando coleção de bins: #{bins.size} itens encontrados." # Debug para verificar o número de bins
         # Retorna um array de hashes para evitar double-encoding no JSON final[cite: 1]
         bins.map { |bin| render(bin) }
       end

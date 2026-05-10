@@ -9,7 +9,7 @@ module Identity
           name: user.name,
           email: user.email,
           role: user.role,
-          status: user.status,
+          status: StatusCatalog.normalize(user.status),
           tenant_id: user.tenant_id,
           created_at: user.created_at,
 
