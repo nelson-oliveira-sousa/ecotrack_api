@@ -18,11 +18,11 @@ class User < ApplicationRecord
     collector:   "collector"
   }
 
-  # Status padronizado como String (Épico 2)
-  enum :status, {
-    active: "active",
-    inactive: "inactive",
-    suspended: "suspended"
+# Status padronizado como String (Épico 2)
+enum :status, {
+    active: 1,
+    inactive: 2,
+    suspended: 0
   }, default: :active
 
   # Validações estruturais absolutas
@@ -34,7 +34,7 @@ class User < ApplicationRecord
 
   # Validação de senha delegada ao validador do domínio Identity (Épico 1)
   # A lógica de complexidade sai do model e vai para o domínio
-  validates :password, identity_password_format: true, if: -> { new_record? || !password.nil? }
+  validates_with Identity::Validators::PasswordFormatValidator, attributes: [ :password ], if: -> { new_record? || !password.nil? }
 
   # Métodos Auxiliares de Domínio
   def system_user?

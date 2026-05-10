@@ -8,11 +8,11 @@ module Identity
 
       def call
         form = Identity::Forms::UserRegistrationForm.new(@user_params)
-        form.tenant_id = @tenant&.id if form.tenant_id.blank?
+        form.tenant_id ||= @tenant&.id
 
         return success({
             user: form.user,
-            temp_password: form.user.password
+            temp_password: form.generated_password
         }, :created) if form.save
 
         failure(form.user.errors.full_messages, :unprocessable_entity)

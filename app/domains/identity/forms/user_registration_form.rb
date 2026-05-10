@@ -4,58 +4,46 @@ module Identity
     class UserRegistrationForm
       include ActiveModel::Model
 
-      # Atributos comuns
-      attr_accessor :email, :name, :role, :tenant_id
-      # Atributos específicos de motorista
-      attr_accessor :cnh_number, :cnh_expiration_date
-
+      attr_accessor :email, :name, :role, :tenant_id,
+                    :cnh_number, :cnh_expiration_date, :cnh_category
       attr_reader :generated_password, :user
 
-      # 1. Validações base para todos
-      validates :email, :name, :role, presence: true
-      validates :email, format: { with: URI::MailTo::EMAIL_REGEXP }
-      validates :tenant_id, presence: true, unless: -> { role == "super_admin" }
-
-      # 2. Validações condicionais: "Se for motorista, inclua os campos que precisa"
-      validates :cnh_number, :cnh_expiration_date, presence: true, if: :driver?
+      validates :email, :name, :role, :tenant_id, presence: true
+      validates :cnh_number, :cnh_expiration_date, presence: true, if: -> { role == "driver" }
 
       def save
         return false unless valid?
 
-        # 3. Gera a senha provisória seguindo as regras de segurança
-        @generated_password = "#{SecureRandom.alphanumeric(8)}A1@"
+        @user = build_user
 
-        @user = User.new(user_attributes)
-        @user.password = @generated_password
-        @user.force_password_change = true
-        @user.status = :active
-
-        @user.save
+        @user.save.tap { |success| errors.merge!(@user.errors) unless success }
       end
 
       private
 
-      def driver?
-        role == "driver"
+      def build_user
+        @generated_password = generate_secure_password
+        User.new(all_attributes)
       end
 
-      def user_attributes
-        attrs = {
+      def all_attributes
+        base_attributes.merge(RoleAttributesResolver.resolve(self))
+      end
+
+      def base_attributes
+        {
           email: email,
           name: name,
           role: role,
-          tenant_id: tenant_id
+          tenant_id: tenant_id,
+          password: @generated_password,
+          force_password_change: true,
+          status: :active
         }
+      end
 
-        # Inclui campos de motorista apenas se necessário
-        if driver?
-          attrs.merge!(
-            cnh_number: cnh_number,
-            cnh_expiration_date: cnh_expiration_date
-          )
-        end
-
-        attrs
+      def generate_secure_password
+        "#{SecureRandom.alphanumeric(10)}!1A"
       end
     end
   end

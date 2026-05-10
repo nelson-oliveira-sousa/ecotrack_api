@@ -65,7 +65,7 @@ module Api
 
       def toggle_status
         puts "🚀 [TrucksController#toggle_status] Caminhão ID: #{@truck.id}, Status Atual: #{@truck.status}"
-        new_status = @truck.status == :available ? :inactive : :available
+        new_status = @truck.status == "available" ? "inactive" : "available"
         if @truck.update(status: new_status)
           data = Fleet::Serializers::TruckSerializer.render(@truck)
           render_result(Result.new(success: true, data: data, status: :ok))

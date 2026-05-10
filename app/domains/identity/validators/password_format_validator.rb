@@ -1,4 +1,4 @@
-module Identity
+module Identity::Validators
   class PasswordFormatValidator < ActiveModel::EachValidator
     def validate_each(record, attribute, value)
       return if value.blank?

@@ -1,33 +1,52 @@
+# app/domains/identity/serializers/user_serializer.rb
 module Identity
   module Serializers
     class UserSerializer
-      def self.render(user, options = {})
-        return {} unless user
+      class << self
+        def render(user, options = {})
+          return {} unless user
 
-        payload = {
+          new(user, options).as_json
+        end
+
+        def render_collection(users, options = {})
+          users.map { |user| render(user, options) }
+        end
+      end
+
+      def initialize(user, options = {})
+        @user = user
+        @options = options
+      end
+
+      def as_json
+        # Junta o básico, com o específico, com o opcional. Lindo e direto.
+        base_attributes
+          .merge(RoleAttributesResolver.resolve(user))
+          .merge(optional_attributes)
+      end
+
+      private
+
+      attr_reader :user, :options
+
+      def base_attributes
+        {
           id: user.id,
           name: user.name,
           email: user.email,
           role: user.role,
           status: user.status,
           tenant_id: user.tenant_id,
-          created_at: user.created_at,
-
-          # Novos campos de documento para os motoristas
-          cnh_number: user.cnh_number,
-          cnh_category: user.cnh_category,
-          cnh_expiration_date: user.cnh_expiration_date
+          created_at: user.created_at&.iso8601
         }
-
-        # Campos opcionais para Login e Cadastro
-        payload[:force_password_change] = user.force_password_change if options[:include_force_change]
-        payload[:temporary_password] = options[:temporary_password] if options[:temporary_password].present?
-
-        payload
       end
 
-      def self.render_collection(users)
-        users.map { |user| render(user) }
+      def optional_attributes
+        attrs = {}
+        attrs[:force_password_change] = user.force_password_change if options[:include_force_change]
+        attrs[:temporary_password] = options[:temporary_password] if options[:temporary_password].present?
+        attrs
       end
     end
   end
