@@ -9,7 +9,7 @@ module Identity
           tenant_code: tenant.code, # O que vai no X-Tenant-Code
           type: tenant.respond_to?(:tenant_type) ? tenant.tenant_type : "prefeitura",
           document: tenant.respond_to?(:document) ? tenant.document : "00.000.000/0001-00",
-          status: tenant.status
+          status: StatusCatalog.normalize(tenant.status)
         }
       end
     end
