@@ -1,14 +1,10 @@
 # app/domains/fleet/services/route_generator.rb
 module Fleet
   module Services
-    class RouteGenerator
-      def self.call(tenant:)
-        new(tenant).call
-      end
-
-      def initialize(tenant)
+    class RouteGenerator < ApplicationService
+      def initialize(tenant:)
         @tenant = tenant
-        @channel = "alerts_tenant_#{@tenant.id}" # O exato canal que seu SSE escuta[cite: 1]
+        @channel = "alerts_tenant_#{@tenant.id}"
       end
 
       def call
@@ -18,22 +14,20 @@ module Fleet
                       .where("level >= ? OR status IN (?)", 50, %w[critical warning])
                       .includes(:bin_address)
         trucks = @tenant.trucks.where(status: :available)
-        drivers = @tenant.users.where(role: :driver) # Corrigido para símbolo (enum)[cite: 1]
+        drivers = @tenant.users.where(role: :driver)
 
         if bins.empty? || trucks.empty? || drivers.empty?
           broadcast_update("error", "Recursos insuficientes (lixeiras, caminhões ou motoristas).")
-          return { error: "Recursos insuficientes" }
+          return failure("Recursos insuficientes", :unprocessable_entity)
         end
 
         broadcast_update("processing", "Consultando inteligência artificial (Gemini) para otimização VRP...")
 
-        # 2. Passa para o Gemini
         routes_allocation = optimize_multi_fleet_with_ai(bins, trucks)
 
         broadcast_update("processing", "IA finalizou. Salvando rotas no banco de dados...")
         created_routes = []
 
-        # 3. Criação atómica das múltiplas rotas[cite: 1]
         ActiveRecord::Base.transaction do
           routes_allocation.each_with_index do |(truck_id, bin_ids), index|
             truck = trucks.find { |t| t.id == truck_id.to_i }
@@ -59,20 +53,18 @@ module Fleet
           end
         end
 
-        # 4. Serializa as rotas criadas para enviar pro Frontend
         serialized_routes = created_routes.as_json(
           include: {
             route_points: { include: { waste_bin: { only: [ :id, :label, :level, :status ] } } }
           }
         )
 
-        # AVISA O FRONTEND QUE ACABOU E ENTREGA OS DADOS!
         broadcast_update("route_ready", "Rotas geradas e otimizadas com sucesso!", serialized_routes)
 
-        { success: true, routes: created_routes }
+        success({ routes: created_routes })
       rescue => e
         broadcast_update("error", "Erro no gerador: #{e.message}")
-        { success: false, error: e.message }
+        failure(e.message, :internal_server_error)
       end
 
       private
@@ -117,7 +109,6 @@ module Fleet
         allocation
       end
 
-      # O MENSAGEIRO: Dispara o NOTIFY pro PostgreSQL[cite: 1]
       def broadcast_update(event_type, message, data = nil)
         payload = {
           event: event_type,
@@ -125,7 +116,6 @@ module Fleet
           data: data
         }.compact.to_json
 
-        # Executa o NOTIFY direto no PG. Quem estiver no LISTEN (o controller stream) recebe na hora.
         ActiveRecord::Base.connection.execute(
           ActiveRecord::Base.sanitize_sql_array([ "NOTIFY %s, '%s'", @channel, payload ])
         )

@@ -1,35 +1,55 @@
 module Telemetry
   module Services
-    module ProcessMessage
-      def self.call(message_id)
-        message = MqttMessage.find_by(id: message_id)
+    class ProcessMessage < ApplicationService
+      def initialize(message: nil, message_id: nil)
+        @message = message || MqttMessage.find_by(id: message_id)
+      end
 
-        unless message
-          Rails.logger.error("❌ MqttMessage com ID #{message_id} não encontrado.")
-          return nil
+      def call
+        return failure("Mensagem MQTT não encontrada.", :not_found) unless @message
+
+        @message.status_processing!
+
+        result = Telemetry::Services::IngestReading.call(
+          sensor_id: sensor_id,
+          level: level,
+          battery: battery,
+          raw_payload: payload,
+          tenant: @message.tenant
+        )
+
+        if result.success?
+          @message.update!(status: :processed, processed_at: Time.current)
+          success({ message: @message, bin: result.data[:bin] })
+        else
+          @message.update!(status: :failed)
+          result
         end
-
-        payload = JSON.parse(message.payload).symbolize_keys
-
-        reading_data = mount_reading_data(payload)
-
-        Waste::Services::UpdateBinStatusService.call(reading_data)
-
-        message.update!(processed_at: Time.zone.now, status: :processed)
       rescue StandardError => e
-        message&.update!(status: :failed, error_log: e.message)
-        raise e
+        @message&.update!(status: :failed)
+        failure("Erro ao processar mensagem MQTT: #{e.message}", :internal_server_error)
       end
 
       private
 
-      def self.mount_reading_data(payload)
-        {
-          bin_id: payload[:bin_id],
-          level: payload[:level].to_f,
-          battery: payload[:battery].to_f,
-          timestamp: Time.zone.now
-        }
+      def payload
+        @payload ||= @message.payload || {}
+      end
+
+      def sensor_id
+        payload["sensor_id"] || payload["sensorId"] || payload.dig("deviceInfo", "devEui")
+      end
+
+      def telemetry
+        payload["object"] || {}
+      end
+
+      def level
+        telemetry["level"] || payload["level"]
+      end
+
+      def battery
+        telemetry["battery"] || payload["battery"]
       end
     end
   end

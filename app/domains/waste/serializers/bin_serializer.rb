@@ -1,26 +1,22 @@
 module Waste
   module Serializers
     class BinSerializer
-      # Método principal para transformar a Model em Hash
       def self.render(bin)
         return nil unless bin
 
         {
           id: bin.id,
-          label: bin.label, # Mantido 'label' para bater com o Vue.js
+          label: bin.label,
           level: bin.level || 0,
           battery: bin.battery,
           status: StatusCatalog.normalize(bin.status),
-          sensor_id: bin.sensor_id, # Alinhado com o banco
+          sensor_id: bin.sensor_id,
 
-          # 🔥 OS CAMPOS DA IA
           ai_insight: bin.ai_prediction,
           predicted_full_at: bin.predicted_full_at&.strftime("%H:%M"),
           last_analysis_at: bin.last_analysis_at,
           equipment_status: StatusCatalog.normalize(bin.equipment_status),
 
-          # 📍 ENDEREÇO E LOCALIZAÇÃO
-          # O método full_address na Model já foi otimizado
           address: bin.full_address,
           location: {
             latitude: bin.bin_address&.latitude,
@@ -37,7 +33,6 @@ module Waste
           },
 
           updated_at: bin.updated_at,
-          # Usa a associação last_collected_reading pré-carregada pelo includes
           last_collection: bin.last_collection
         }
       end
@@ -46,13 +41,10 @@ module Waste
         resource.respond_to?(:map) ? render_collection(resource) : render(resource)
       end
 
-
       def self.render_collection(bins)
-        # Retorna um array de hashes para evitar double-encoding no JSON final[cite: 1]
         bins.map { |bin| render(bin) }
       end
 
-      # Helpers para erros e estados (opcional, já que o ApiResponder cuida disso)[cite: 1]
       def self.render_errors(bin)
         { success: false, error: bin.errors.full_messages }
       end

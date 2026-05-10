@@ -104,7 +104,6 @@ module Api
 
       def set_route
         @route = Current.user.tenant.routes.find(params[:id])
-        # ❌ REMOVIDO: rescue ActiveRecord::RecordNotFound (Nosso ApiResponder resolve isso)
       end
     end
   end

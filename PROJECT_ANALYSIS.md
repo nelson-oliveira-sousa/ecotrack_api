@@ -366,3 +366,107 @@ O projeto tem uma fundacao promissora: boa separacao de dominios, escolha modern
 O risco atual nao e a falta de arquitetura; e a divergencia entre iteracoes do codigo. Algumas migracoes evoluiram (`dev_eui` para `sensor_id`, remocao de `tenant_slug`), mas services e fixtures ficaram para tras. Corrigir esses contratos vai destravar testes, ingestao de telemetria, onboarding de tenants e evolucao segura das features.
 
 Minha leitura: antes de adicionar novas funcionalidades, vale fazer uma sprint curta de estabilizacao. O retorno deve ser alto, porque os problemas estao bem localizados e afetam justamente os fluxos centrais.
+
+## 14. Reanalise apos implementacao
+
+Data da reanalise: 2026-05-10
+
+### Estado atual
+
+O primeiro pacote de estabilizacao foi aplicado e commitado em `413acef` (`ajuste codex`). A suite automatizada agora executa com sucesso contra o banco de teste PostgreSQL.
+
+Validacao executada:
+
+```bash
+env RAILS_ENV=test POSTGRES_HOST=127.0.0.1 bin/rails test
+```
+
+Resultado:
+
+```text
+9 runs, 48 assertions, 0 failures, 0 errors, 0 skips
+```
+
+### Pontos corrigidos
+
+1. `config/database.yml` agora possui ambiente `test`.
+2. Fixtures antigas foram alinhadas ao schema atual.
+3. `MqttBatchProcessorJob` passou a usar `sensor_id` e `ready_for_processing`.
+4. Uso de colunas inexistentes `dev_eui` e `error_log` foi removido do job MQTT.
+5. `Tenants::Services::CreateWithAdmin` agora segue o contrato `ApplicationService`/`Result`.
+6. `UsersController#create` evita double render em erro.
+7. `BinsController#sensor` foi implementado para a rota publica ja declarada.
+8. `ApiResponder` voltou a tratar `ActiveRecord::RecordNotFound` como `404`, nao `500`.
+9. `Fleet::Truck` agora consegue persistir `inactive`.
+10. `RouteGenerator` foi ajustado para status string e chamada correta ao `GeminiClient`.
+
+### Riscos remanescentes
+
+1. O endpoint publico de sensor ainda precisa de autenticacao de dispositivo antes de producao.
+2. `Telemetry::Services::IngestReading` e `Telemetry::Services::ProcessMessage` ainda representam caminhos legados/inconsistentes; o pipeline principal validado agora e `MqttMessage` + `MqttBatchProcessorJob`.
+3. `mqtt_messages` ainda nao possui campo persistido para erro detalhado (`last_error` ou equivalente).
+4. README segue precisando de setup executavel.
+5. CORS permanece aberto e deve ser restringido por ambiente antes de deploy real.
+
+### Proxima etapa recomendada
+
+Priorizar o hardening do fluxo IoT:
+
+1. Criar autenticacao para sensores.
+2. Adicionar coluna `last_error` em `mqtt_messages`.
+3. Remover ou refatorar services legados de telemetria.
+4. Criar testes especificos para payloads MQTT validos, payloads invalidos e sensor desconhecido.
+
+## 15. Padronizacao por camadas aplicada
+
+Data da revisao: 2026-05-10
+
+### Padrao arquitetural definido
+
+O projeto passa a seguir este contrato entre camadas:
+
+1. Controllers apenas autenticam, autorizam, extraem parametros e renderizam `Result`.
+2. Services concentram regra de negocio e sempre retornam `Result`.
+3. Jobs apenas orquestram services e registram falhas em log.
+4. Models mantem associacoes, validacoes, callbacks pequenos e invariantes locais.
+5. Serializers normalizam a exposicao da API, incluindo status canonicos via `StatusCatalog`.
+6. Fixtures e testes devem refletir o schema atual, sem campos legados.
+
+### Melhorias implementadas nesta rodada
+
+1. Criado `Waste::Services::RecordReading` como ponto unico para registrar leitura, atualizar estado atual da lixeira, criar historico e disparar analise de IA quando necessario.
+2. `Telemetry::Services::IngestReading` foi reescrito para usar contrato por `sensor_id`, `level` e `battery`, sem `tenant_slug`.
+3. `Telemetry::Services::ProcessMessage` foi reescrito como `ApplicationService`, processando `MqttMessage` e retornando `Result`.
+4. `MqttBatchProcessorJob` passou a delegar o processamento para o service de telemetria.
+5. `Waste::Services::CollectBinService` agora retorna `Result` e preserva o status `collected`.
+6. `Waste::Bin` foi ajustado para nao sobrescrever coleta explicita com `normal` no callback de status.
+7. `Identity::Services::Authenticator`, `Identity::Services::Revoker`, `Waste::Services::AnalyzeBinService` e `Fleet::Services::RouteGenerator` foram alinhados ao contrato `ApplicationService`/`Result`.
+8. `ApiController` passou a renderizar erros de autenticacao/autorizacao no envelope padrao `{ success, data, error }`.
+9. `User` ganhou role `manager`, eliminando chamada para role inexistente.
+10. `BinsController` e `TrucksController` foram limpos para orquestracao simples, sem `puts` e sem comentarios temporarios.
+11. `config/routes.rb`, serializers e runners foram limpos de anotacoes temporarias.
+12. `CORS_ORIGINS` foi introduzido para permitir restringir origens por ambiente.
+13. `Api::V1::ShiftsController#index` foi criado para cobrir a rota declarada.
+14. Foram adicionados testes de dominio para processamento MQTT e coleta de lixeira.
+
+### Validacao
+
+Comando executado:
+
+```bash
+env RAILS_ENV=test POSTGRES_HOST=127.0.0.1 bin/rails test
+```
+
+Resultado:
+
+```text
+12 runs, 61 assertions, 0 failures, 0 errors, 0 skips
+```
+
+### Pendencias tecnicas restantes
+
+1. Adicionar autenticacao propria para o endpoint publico de sensor antes de producao.
+2. Persistir motivo de falha em `mqtt_messages` com `last_error` ou tabela de eventos.
+3. Criar serializer dedicado para rotas e alertas, removendo `as_json` direto dos controllers.
+4. Transformar `README.md` em guia executavel de setup, testes, jobs e MQTT.
+5. Rever `LISTEN/NOTIFY` para usar canais separados entre alertas e progresso de rotas.

@@ -1,25 +1,26 @@
 # app/domains/waste/services/collect_bin_service.rb
 module Waste
   module Services
-    class CollectBinService
-      def self.call(bin:, collected_at: nil)
-        # 1. Atualiza o estado atual da lixeira
-        # Certifique-se que o enum no model Bin foi corrigido de 'colleected' para 'collected'
-        success = bin.update(
-          level: 0,
-          status: "collected"
-        )
+    class CollectBinService < ApplicationService
+      def initialize(bin:, collected_at: nil)
+        @bin = bin
+        @collected_at = collected_at
+      end
 
-        if success
-          # 2. Registra o evento de coleta no histórico (Readings)
-          bin.readings.create!(
+      def call
+        ActiveRecord::Base.transaction do
+          @bin.update!(level: 0, status: "collected")
+          @bin.readings.create!(
             level: 0,
             status: "collected",
-            battery: bin.battery
+            battery: @bin.battery,
+            created_at: @collected_at.presence || Time.current
           )
         end
 
-        success
+        success({ bin: @bin })
+      rescue ActiveRecord::RecordInvalid => e
+        failure(e.record.errors.full_messages, :unprocessable_entity)
       end
     end
   end

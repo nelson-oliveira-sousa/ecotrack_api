@@ -20,43 +20,10 @@ class MqttBatchProcessorJob < ApplicationJob
   private
 
   def process_message(msg)
-    msg.status_processing!
-    payload = msg.payload
+    result = Telemetry::Services::ProcessMessage.call(message: msg)
 
-    dev_eui = payload.dig("deviceInfo", "devEui")
-    sensor_id = payload["sensor_id"] || payload["sensorId"] || dev_eui
-    telemetry = payload["object"] || {}
-
-    new_level = telemetry["level"] || payload["level"]
-    battery_level = telemetry["battery"] || payload["battery"] || 100
-
-    bin = Waste::Bin.find_by!(sensor_id: sensor_id)
-
-    # 🔥 ATUALIZAÇÃO SÊNIOR: Transação Atômica
-    ActiveRecord::Base.transaction do
-      # Atualiza o estado atual da lixeira
-      bin.update!(level: new_level, battery: battery_level)
-
-      # Cria o registro histórico para os gráficos e IA
-      bin.readings.create!(
-        level: new_level,
-        status: bin.status,
-        battery: battery_level
-      )
-
-      # Dispara a IA apenas se necessário
-      if bin.analysis_needed?
-        Waste::AiAnalysisJob.perform_later(bin.id)
-      end
+    if result.failure?
+      Rails.logger.error("Erro no processamento MQTT #{msg.id}: #{result.error}")
     end
-
-    msg.update!(status: :processed, processed_at: Time.current)
-
-  rescue ActiveRecord::RecordNotFound
-    msg.update!(status: :failed)
-    Rails.logger.error("Dispositivo #{sensor_id || dev_eui} não cadastrado.")
-  rescue => e
-    msg.update!(status: :failed)
-    Rails.logger.error("Erro no processamento MQTT #{msg.id}: #{e.message}")
   end
 end

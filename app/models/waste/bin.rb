@@ -24,7 +24,7 @@ module Waste
     accepts_nested_attributes_for :bin_address, update_only: true
 
     # Callbacks
-    before_save :sync_status, if: :level_changed?
+    before_save :sync_status, if: :should_sync_status?
 
     enum :equipment_status, {
       online: "online",
@@ -63,6 +63,10 @@ module Waste
 
     def sync_status
       self.status = Waste::BinStatusResolver.call(level.to_i)
+    end
+
+    def should_sync_status?
+      level_changed? && !(will_save_change_to_status? && status == "collected")
     end
 
     def analysis_needed?
