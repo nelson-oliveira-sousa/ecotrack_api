@@ -2,7 +2,7 @@ module Telemetry
   module Services
     module ProcessMessage
       def self.call(message_id)
-        message = MqttMessage.find(message_id)
+        message = MqttMessage.find_by(id: message_id)
 
         unless message
           Rails.logger.error("❌ MqttMessage com ID #{message_id} não encontrado.")
@@ -16,18 +16,18 @@ module Telemetry
         Waste::Services::UpdateBinStatusService.call(reading_data)
 
         message.update!(processed_at: Time.zone.now, status: :processed)
-      rescue => e
-        message.update!(status: :failed, error_log: e.message)
+      rescue StandardError => e
+        message&.update!(status: :failed, error_log: e.message)
         raise e
       end
 
       private
 
-      def mount_reading_data(payload)
+      def self.mount_reading_data(payload)
         {
           bin_id: payload[:bin_id],
           level: payload[:level].to_f,
-          batery: payload[:battery].to_f,
+          battery: payload[:battery].to_f,
           timestamp: Time.zone.now
         }
       end

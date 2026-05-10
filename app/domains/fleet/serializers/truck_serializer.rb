@@ -14,7 +14,7 @@ module Fleet
             id: truck.id,
             plate: truck.plate,
             capacity: truck.capacity,
-            status: truck.status,
+            status: StatusCatalog.normalize(truck.status),
             model: truck.model,
 
             # Novos campos de documentação do caminhão
