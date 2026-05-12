@@ -1,3 +1,4 @@
+# app/controllers/api/v1/alerts_controller.rb
 module Api
   module V1
     class AlertsController < Api::V1::ApiController
@@ -5,19 +6,16 @@ module Api
 
       # GET /api/v1/alerts
       def index
-        # Traz os alertas do tenant atual, ordenados pelos mais recentes
         alerts = Current.tenant.alerts.order(created_at: :desc)
 
-        # Formatando a saída usando as_json (o ideal no futuro é ter um AlertSerializer)
-        data = alerts.as_json(only: [ :id, :status, :created_at, :updated_at ])
+        # Utiliza o Serializer para manter o formato padronizado
+        data = Alerts::Serializers::AlertSerializer.render_collection(alerts)
 
         render_result(Result.new(success: true, data: data))
       end
 
       # GET /api/v1/alerts/stream
       def stream
-        # ⚡ SSE: Mantemos a infraestrutura crua do Rack/Puma.
-        # Não utilizamos render_result aqui pois a conexão não fecha.
         response.headers["Content-Type"] = "text/event-stream"
         response.headers["Last-Modified"] = Time.now.httpdate
         response.headers["Cache-Control"] = "no-cache"
@@ -25,29 +23,12 @@ module Api
 
         channel = "alerts_tenant_#{Current.tenant.id}"
 
-        ActiveRecord::Base.connection_pool.with_connection do |connection|
-          connection.execute("LISTEN #{channel}")
-
-          begin
-            loop do
-              connection.raw_connection.wait_for_notify(5) do |event, pid, payload|
-                response.stream.write("data: #{payload}\n\n")
-              end
-              response.stream.write(":\n\n")
-            end
-          rescue IOError, ActionController::Live::ClientDisconnected
-            Rails.logger.info "Conexão SSE do Tenant #{Current.tenant.id} fechada."
-          ensure
-            connection.execute("UNLISTEN #{channel}")
-            response.stream.close
-          end
-        end
+        # Delega a ligação persistente para o Adaptador
+        Stream::PostgresClient.listen(channel: channel, stream: response.stream)
       end
 
       # PATCH/PUT /api/v1/alerts/:id/resolve
       def resolve
-        # O Controller delega a verificação de existência, idempotência e update
-        # para a camada de domínio (Service).
         result = Alerts::Services::ResolveAlert.call(
           tenant: Current.tenant,
           alert_id: params[:id]

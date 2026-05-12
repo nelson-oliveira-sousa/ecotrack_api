@@ -8,39 +8,31 @@ module Alerts
       end
 
       def call
-        # 1. Blindagem multi-tenant imediata
         alert = @tenant.alerts.find_by(id: @alert_id)
 
-        return failure("Alerta não encontrado.", :not_found) unless alert
+        return Result.new(success: false, error: "Alerta não encontrado.", status: :not_found) unless alert
+        return Result.new(success: true, data: Alerts::Serializers::AlertSerializer.render(alert), status: :ok) if alert.resolved?
 
-        # 2. Idempotência: Devolve sucesso mesmo se já estiver resolvido,
-        # sem quebrar o cliente que tentou duas vezes.
-        if alert.resolved?
-          return success(payload_format(alert, "Este alerta já foi resolvido e retirado da fila."))
-        end
-
-        # 3. Execução da Ação
         if alert.update(status: :resolved)
-          success(payload_format(alert, "Alerta resolvido com sucesso."))
+          broadcast_resolved(alert)
+          Result.new(success: true, data: Alerts::Serializers::AlertSerializer.render(alert), status: :ok)
         else
-          failure(alert.errors.full_messages, :unprocessable_entity)
+          Result.new(success: false, error: alert.errors.full_messages, status: :unprocessable_entity)
         end
-      rescue StandardError => e
-        failure("Erro ao processar a resolução do alerta: #{e.message}", :internal_server_error)
       end
 
       private
 
-      # Helper para não repetir o mesmo formato de saída nas duas condições de sucesso
-      def payload_format(alert, message)
-        {
-          message: message,
-          alert: {
-            id: alert.id,
-            status: alert.status,
-            resolved_at: alert.updated_at
-          }
+      def broadcast_resolved(alert)
+        channel = "alerts_tenant_#{alert.tenant_id}"
+
+        payload = {
+          success: true,
+          action: "ALERT_RESOLVED",
+          data: Alerts::Serializers::AlertSerializer.render(alert)
         }
+
+        Stream::PostgresClient.broadcast(channel: channel, payload: payload)
       end
     end
   end
