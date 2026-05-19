@@ -1,51 +1,30 @@
-# app/controllers/concerns/api_responder.rb
 module ApiResponder
   extend ActiveSupport::Concern
 
-  included do
-    # rescue_from procura handlers em ordem reversa de declaração; o genérico
-    # precisa vir antes para não engolir os handlers específicos abaixo.
-    rescue_from StandardError, with: :internal_server_error unless Rails.env.development?
-
-    rescue_from ActiveRecord::RecordNotFound, with: :record_not_found
-    rescue_from ActiveRecord::RecordInvalid, with: :record_invalid
-  end
-
-  # Helper global para renderizar o objeto Result dos Services
-  def render_result(result)
-    render json: {
-      success: result.success?,
-      data: result.data,
-      error: result.error
-    }, status: result.status
-  end
-
   private
 
-  def record_not_found(exception)
-    render json: {
-      success: false,
-      data: nil,
-      error: "Registro não encontrado: #{exception.model}"
-    }, status: :not_found
+  def respond_with_result(result, serializer: nil)
+    render json: serialized_result(result, serializer),
+           status: result.status
   end
 
-  def record_invalid(exception)
-    render json: {
-      success: false,
-      data: nil,
-      error: exception.record.errors.full_messages
-    }, status: :unprocessable_entity
+  def serialized_result(result, serializer)
+    Shared::Serializers::ApiResponseSerializer.render(
+      success: result.success?,
+      data: serialize_data(result.data, serializer),
+      errors: result.errors
+    )
   end
 
-  def internal_server_error(exception)
-    # Sempre logue o erro real antes de mascará-lo para o usuário
-    Rails.logger.error("[ServerError] #{exception.message}\n#{exception.backtrace.first(10).join("\n")}")
+  def serialize_data(data, serializer)
+    return nil if data.nil?
 
-    render json: {
-      success: false,
-      data: nil,
-      error: "Ocorreu um erro interno no servidor." # Nunca vaze detalhes técnicos (exception.message) para o client
-    }, status: :internal_server_error
+    if serializer
+      serializer.render_as_hash(data)
+    elsif data.respond_to?(:as_json)
+      data.as_json
+    else
+      data
+    end
   end
 end

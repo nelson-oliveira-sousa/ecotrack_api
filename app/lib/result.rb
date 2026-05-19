@@ -1,11 +1,11 @@
 # app/lib/result.rb
 class Result
-  attr_reader :data, :error, :status
+  attr_reader :data, :errors, :status
 
-  def initialize(success:, data: nil, error: nil, status: :ok)
+  def initialize(success:, data: nil, errors: [], status: :ok)
     @success = success
     @data = data
-    @error = error
+    @errors = normalize_errors(errors)
     @status = status
   end
 
@@ -17,11 +17,26 @@ class Result
     !@success
   end
 
-  def to_h
-    {
-      success: success?,
-      data: data,
-      error: error
-    }
+  def self.success(data: nil, status: :ok)
+    new(success: true, data: data, status: status)
+  end
+
+  def self.failure(errors: [], status: :unprocessable_entity)
+    new(success: false, errors: errors, status: status)
+  end
+
+  private
+
+  def normalize_errors(errors)
+    Array(errors).map do |error|
+      case error
+      when String
+        { message: error }
+      when Hash
+        error
+      else
+        { message: error.to_s }
+      end
+    end
   end
 end

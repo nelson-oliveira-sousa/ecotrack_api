@@ -1,74 +1,72 @@
+# app/controllers/api/v1/trucks_controller.rb
 module Api
   module V1
     class TrucksController < Api::V1::ApiController
-      before_action :set_truck, only: [ :show, :update, :destroy, :update_location, :toggle_status ]
+      # O ApiResponder fornece o método respond_with_result
+      include ApiResponder
 
       def index
+        # Idealmente, você pode criar um Fleet::UseCases::ListTrucks no futuro
         trucks = Current.user.tenant.trucks
-        data = Fleet::Serializers::TruckSerializer.render_collection(trucks)
 
-        render_result(Result.new(success: true, data: data))
+        respond_with_result(
+          Result.success(trucks),
+          serializer: Fleet::Serializers::TruckSerializer
+        )
       end
 
       def show
-        data = Fleet::Serializers::TruckSerializer.render(@truck)
+        result = Fleet::UseCases::FindTruck.call(params[:id], Current.user.tenant_id)
 
-        render_result(Result.new(success: true, data: data))
+        respond_with_result(result, serializer: Fleet::Serializers::TruckSerializer)
       end
 
       def create
-        truck = Current.user.tenant.trucks.new(truck_params)
+        result = Fleet::UseCases::CreateTruck.call(
+          truck_params.merge(tenant_id: Current.user.tenant_id)
+        )
 
-        if truck.save
-          data = Fleet::Serializers::TruckSerializer.render(truck)
-          render_result(Result.new(success: true, data: data, status: :created))
-        else
-          render_result(Result.new(success: false, error: truck.errors.full_messages, status: :unprocessable_entity))
-        end
+        respond_with_result(result, serializer: Fleet::Serializers::TruckSerializer)
       end
 
       def update
-        if @truck.update(truck_params)
-          data = Fleet::Serializers::TruckSerializer.render(@truck)
-          render_result(Result.new(success: true, data: data))
-        else
-          render_result(Result.new(success: false, error: @truck.errors.full_messages, status: :unprocessable_entity))
-        end
+        result = Fleet::UseCases::UpdateTruck.call(
+          params[:id],
+          truck_params.merge(tenant_id: Current.user.tenant_id)
+        )
+
+        respond_with_result(result, serializer: Fleet::Serializers::TruckSerializer)
       end
 
-      def destroy
-        if @truck.in_route?
-          render_result(Result.new(success: false, error: "Não é possível remover um caminhão que está em circulação.", status: :unprocessable_entity))
-        else
-          @truck.destroy
-          render_result(Result.new(success: true, data: { message: "Caminhão removido com sucesso." }))
-        end
+      def deactivate
+        result = Fleet::UseCases::DeactivateTruck.call(params[:id], Current.user.tenant_id)
+
+        respond_with_result(result, serializer: Fleet::Serializers::TruckSerializer)
       end
 
+      # Ações específicas podem ter seus próprios Use Cases ou Services se a lógica crescer
       def update_location
-        if @truck.update(location_params)
-          data = Fleet::Serializers::TruckSerializer.render(@truck)
-          render_result(Result.new(success: true, data: data))
+        truck = Current.user.tenant.trucks.find(params[:id])
+
+        if truck.update(location_params)
+          respond_with_result(Result.success(truck), serializer: Fleet::Serializers::TruckSerializer)
         else
-          render_result(Result.new(success: false, error: @truck.errors.full_messages, status: :unprocessable_entity))
+          respond_with_result(Result.failure(truck.errors))
         end
       end
 
       def toggle_status
-        new_status = @truck.status == "available" ? "inactive" : "available"
-        if @truck.update(status: new_status)
-          data = Fleet::Serializers::TruckSerializer.render(@truck)
-          render_result(Result.new(success: true, data: data, status: :ok))
+        truck = Current.user.tenant.trucks.find(params[:id])
+        new_status = truck.status == "available" ? "inactive" : "available"
+
+        if truck.update(status: new_status)
+          respond_with_result(Result.success(truck), serializer: Fleet::Serializers::TruckSerializer)
         else
-          render_result(Result.new(success: false, error: @truck.errors.full_messages, status: :unprocessable_entity))
+          respond_with_result(Result.failure(truck.errors))
         end
       end
 
       private
-
-      def set_truck
-        @truck = Current.user.tenant.trucks.find(params[:id])
-      end
 
       def truck_params
         params.require(:truck).permit(
