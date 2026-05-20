@@ -169,7 +169,7 @@ GEM
       rdoc (>= 4.0.0)
       reline (>= 0.4.2)
     json (2.19.3)
-    jwt (3.1.2)
+    jwt (3.2.0)
       base64
     kamal (2.11.0)
       activesupport (>= 7.0)
@@ -402,7 +402,7 @@ DEPENDENCIES
   dry-validation (~> 1.11)
   faraday
   image_processing (~> 1.2)
-  jwt (~> 3.1)
+  jwt (~> 3.2)
   kamal
   mqtt (~> 0.7.0)
   pg (~> 1.1)
